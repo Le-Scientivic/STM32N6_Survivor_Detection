@@ -74,7 +74,7 @@
  *  1: Use function.  0: No use function.
  */
 #define USE_NOINIT (0)     /* Use zero-clear bss section */
-#define USE_IMALLOC (0)    /* Use dynamic memory allocation */
+#define USE_IMALLOC (1)    /* Use dynamic memory allocation */
 #define USE_SHUTDOWN (1)   /* Use System shutdown */
 #define USE_STATIC_IVT (0) /* Use static interrupt vector table */
 

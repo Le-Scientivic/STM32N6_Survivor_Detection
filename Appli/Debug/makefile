@@ -1,6 +1,6 @@
 ################################################################################
 # Automatically-generated file. Do not edit!
-# Toolchain: GNU Tools for STM32 (13.3.rel1)
+# Toolchain: GNU Tools for STM32 (14.3.rel1)
 ################################################################################
 
 -include ../makefile.init
@@ -194,8 +194,8 @@ all:
 main-build: STM32N6_MTK_Person_Detection_Appli.elf secondary-outputs
 
 # Tool invocations
-STM32N6_MTK_Person_Detection_Appli.elf STM32N6_MTK_Person_Detection_Appli.map: $(OBJS) $(USER_OBJS) /home/supun_g/STM32CubeIDE/workspace_1.19.0/STM32N6_MTK_Person_Detection/Appli/STM32N657X0HXQ_LRUN.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "STM32N6_MTK_Person_Detection_Appli.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m55 -T"/home/supun_g/STM32CubeIDE/workspace_1.19.0/STM32N6_MTK_Person_Detection/Appli/STM32N657X0HXQ_LRUN.ld" --specs=nosys.specs -Wl,-Map="STM32N6_MTK_Person_Detection_Appli.map" -Wl,--gc-sections -static -Wl,--cmse-implib -Wl,--out-implib=./secure_nsclib.o -L../../Lib/AI_Runtime/Lib/GCC/ARMCortexM55 -L../../Lib/Camera_Middleware/ISP_Library/evision/Lib --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+STM32N6_MTK_Person_Detection_Appli.elf STM32N6_MTK_Person_Detection_Appli.map: $(OBJS) $(USER_OBJS) /home/icam/repos/STM32N6_Survivor_Detection/Appli/STM32N657X0HXQ_LRUN.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "STM32N6_MTK_Person_Detection_Appli.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m55 -T"/home/icam/repos/STM32N6_Survivor_Detection/Appli/STM32N657X0HXQ_LRUN.ld" --specs=nosys.specs -Wl,-Map="STM32N6_MTK_Person_Detection_Appli.map" -Wl,--gc-sections -static -Wl,--cmse-implib -Wl,--out-implib=./secure_nsclib.o -L../../Lib/AI_Runtime/Lib/GCC/ARMCortexM55 -L../../Lib/Camera_Middleware/ISP_Library/evision/Lib --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -220,8 +220,8 @@ clean:
 	-@echo ' '
 
 post-build:
-	cd "/home/supun_g/STM32CubeIDE/workspace_1.19.0/STM32N6_MTK_Person_Detection/Appli/Debug"
-	echo y | "/home/supun_g/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_SigningTool_CLI" -bin "STM32N6_MTK_Person_Detection_Appli.bin" -nk -of 0x80000000 -t fsbl -o "STM32N6_MTK_Person_Detection_Appli-Trusted.bin" -hv 2.3 -dump "STM32N6_MTK_Person_Detection_Appli-Trusted.bin"
+	cd "/home/icam/repos/STM32N6_Survivor_Detection/Appli/Debug"
+	echo y | "/home/icam/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_SigningTool_CLI" -bin "STM32N6_MTK_Person_Detection_Appli.bin" -nk -of 0x80000000 -t fsbl -o "STM32N6_MTK_Person_Detection_Appli-Trusted.bin" -hv 2.3 -dump "STM32N6_MTK_Person_Detection_Appli-Trusted.bin"
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST) $(OBJCOPY_BIN)
