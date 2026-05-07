@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation Technique — STM32N6 Survivor Detection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+
+<div class="page-title index-hero">
+  <h1>STM32N6 Survivor Detection</h1>
+  <p>Documentation technique — Détection de survivants temps réel sur STM32N6570-DK avec NPU et μT-Kernel 3.0</p>
+  <div class="logo-bar">
+    <span class="badge badge-blue">STM32N6570-DK</span>
+    <span class="badge badge-purple">μT-Kernel 3.0</span>
+    <span class="badge badge-green">YOLO-X Nano (INT8)</span>
+    <span class="badge badge-orange">NPU accéléré</span>
+  </div>
+</div>
+
+<main>
+
+  <!-- KPI -->
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="label">Cible matérielle</div>
+      <div class="value">STM32N657X0H3Q</div>
+      <div class="sub">Cortex-M55 @ 600 MHz · NPU intégré</div>
+    </div>
+    <div class="info-card">
+      <div class="label">Modèle IA</div>
+      <div class="value">YOLO-X Nano</div>
+      <div class="sub">480×480 RGB888 · INT8 quantizé</div>
+    </div>
+    <div class="info-card">
+      <div class="label">Tâches RTOS</div>
+      <div class="value">5</div>
+      <div class="sub">isp · nn · pp · dp · main</div>
+    </div>
+    <div class="info-card">
+      <div class="label">Pipeline caméra</div>
+      <div class="value">DCMIPP × 2</div>
+      <div class="sub">Pipe1 affichage · Pipe2 NN</div>
+    </div>
+    <div class="info-card">
+      <div class="label">Performance cible</div>
+      <div class="value">25–30 FPS</div>
+      <div class="sub">Inférence ~30–50 ms / frame</div>
+    </div>
+    <div class="info-card">
+      <div class="label">Classes détectées</div>
+      <div class="value">2</div>
+      <div class="sub">person · not_person</div>
+    </div>
+  </div>
+
+  <!-- ===== ARCHITECTURE ===== -->
+  <div class="section-title">Architecture du système</div>
+
+  <div class="cards">
+
+    <!-- Hardware -->
+    <a class="card card-hw" href="01-Architecture-Hardware/architecture-hardware.html">
+      <div class="card-top">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <h3>Architecture Matérielle</h3>
+        <p>Carte STM32N6570-DK : MCU Cortex-M55 + NPU, mémoires XSPI (RAM externe et flash NOR), capteurs caméra MIPI CSI-2, écran LTDC 800×480, console USART1.</p>
+        <div class="tag-list">
+          <span class="tag tag-blue">Cortex-M55 600 MHz</span>
+          <span class="tag tag-orange">NPU intégré</span>
+          <span class="tag tag-purple">XSPI1 / XSPI2</span>
+          <span class="tag tag-slate">LTDC RGB565</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span style="font-size:0.8rem;color:#7a8fa3">Plateforme STM32N6570-DK</span>
+        <span class="btn-open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Ouvrir
+        </span>
+      </div>
+    </a>
+
+    <!-- Software -->
+    <a class="card card-sw" href="02-Architecture-Logicielle/01-vue-ensemble.html">
+      <div class="card-top">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </div>
+        <h3>Architecture Logicielle</h3>
+        <p>Vue d'ensemble du firmware : initialisation système, μT-Kernel 3.0, modules applicatifs, pipeline d'inférence multi-tâches, protocole série JSON et procédure de build.</p>
+        <div class="tag-list">
+          <span class="tag tag-purple">5 tâches RTOS</span>
+          <span class="tag tag-blue">Buffer queues</span>
+          <span class="tag tag-green">Sémaphores · mutex</span>
+          <span class="tag tag-orange">JSON serial</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span style="font-size:0.8rem;color:#7a8fa3">6 chapitres · navigation par onglets</span>
+        <span class="btn-open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Ouvrir
+        </span>
+      </div>
+    </a>
+
+    <!-- AI Model -->
+    <a class="card card-ai" href="03-Modele-IA/modele-yolo-x.html">
+      <div class="card-top">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 01-7 7m-7-7a7 7 0 017-7"/><circle cx="12" cy="2" r="1"/><circle cx="12" cy="22" r="1"/><circle cx="22" cy="12" r="1"/><circle cx="2" cy="12" r="1"/></svg>
+        </div>
+        <h3>Modèle IA YOLO-X Nano</h3>
+        <p>Réseau de détection d'objets quantifié INT8, adapté STMicroelectronics : entrée 480×480 RGB888, sortie boîtes englobantes, NMS et seuil de confiance, accélération NPU NeuralART.</p>
+        <div class="tag-list">
+          <span class="tag tag-green">YOLO-X Nano</span>
+          <span class="tag tag-blue">INT8 quantizé</span>
+          <span class="tag tag-orange">NeuralART</span>
+          <span class="tag tag-slate">3,6 MB modèle</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span style="font-size:0.8rem;color:#7a8fa3">Modèle stocké en flash XSPI2</span>
+        <span class="btn-open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Ouvrir
+        </span>
+      </div>
+    </a>
+
+    <!-- Mapping fonctions -->
+    <a class="card card-sw" href="02-Architecture-Logicielle/mapping-fonctions.html" style="border-top-color:#4f46e5">
+      <div class="card-top">
+        <div class="icon" style="background:#4338ca">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <h3>Mapping fonctions</h3>
+        <p>Cartographie interactive de toutes les fonctions applicatives — fichiers, dépendances entre fonctions, signature, callees/callers, paramètres globaux et statut (point d'entrée, utilisé, mort).</p>
+        <div class="tag-list">
+          <span class="tag" style="background:#4338ca;color:#c7d2fe">94 fonctions</span>
+          <span class="tag" style="background:#4338ca;color:#c7d2fe">12 modules</span>
+          <span class="tag" style="background:#4338ca;color:#c7d2fe">Filtres + tri</span>
+          <span class="tag" style="background:#4338ca;color:#c7d2fe">Modales détails</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span style="font-size:0.8rem;color:#7a8fa3">Extraction de Appli/Core/Src/*.c</span>
+        <span class="btn-open" style="background:#4f46e5">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Ouvrir
+        </span>
+      </div>
+    </a>
+
+    <!-- Grafcet -->
+    <a class="card card-grafcet" href="04-Sequencage/grafcet.html">
+      <div class="card-top">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/><line x1="12" y1="7" x2="12" y2="10"/><line x1="12" y1="14" x2="12" y2="17"/></svg>
+        </div>
+        <h3>Grafcet Fonctionnel</h3>
+        <p>Séquençage opérationnel du système : démarrage FSBL → application, boot RTOS, boucle d'acquisition / inférence / affichage, gestion des événements et synchronisation entre les 5 tâches concurrentes.</p>
+        <div class="tag-list">
+          <span class="tag tag-cyan">Boot FSBL</span>
+          <span class="tag tag-purple">Cycle de détection</span>
+          <span class="tag tag-orange">Sync inter-tâches</span>
+          <span class="tag tag-slate">VSYNC trigger</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span style="font-size:0.8rem;color:#7a8fa3">Initialisation · Détection · Tracking</span>
+        <span class="btn-open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Ouvrir
+        </span>
+      </div>
+    </a>
+
+  </div>
+
+</main>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · μT-Kernel 3.0 BSP2 — Construite à partir du code source du dépôt STM32N6_Survivor_Detection
+</footer>
+
+</body>
+</html>

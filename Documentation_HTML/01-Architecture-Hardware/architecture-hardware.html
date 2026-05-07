@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture Matérielle — STM32N6 Survivor Detection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="architecture-hardware.html" class="active">Architecture Matérielle</a></li>
+    <li><a href="../02-Architecture-Logicielle/01-vue-ensemble.html">Architecture Logicielle</a></li>
+    <li><a href="../03-Modele-IA/modele-yolo-x.html">Modèle IA</a></li>
+    <li><a href="../04-Sequencage/grafcet.html">Grafcet</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>STM32N6 Survivor Detection</div>
+</nav>
+
+<div class="page-title">
+  <h1>Architecture Matérielle</h1>
+  <p>Plateforme STM32N6570-DK Discovery — MCU, NPU, mémoires externes, capteurs caméra et écran LCD</p>
+</div>
+
+<div class="container">
+
+  <div class="callout">
+    <strong>📐 Vue d'ensemble</strong>
+    <p>Le système repose sur la carte de développement <strong>STM32N6570-DK</strong> de STMicroelectronics. Toute la chaîne d'acquisition vidéo, d'inférence IA et d'affichage est exécutée sur la même puce STM32N657, qui combine un cœur Arm Cortex-M55 et une unité de traitement neuronal (NPU) accélérant les réseaux de convolution.</p>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat blue"><div class="val">600 MHz</div><div class="lbl">Cortex-M55</div></div>
+    <div class="stat green"><div class="val">NPU</div><div class="lbl">Accélérateur IA</div></div>
+    <div class="stat purple"><div class="val">2-lane</div><div class="lbl">MIPI CSI-2</div></div>
+    <div class="stat orange"><div class="val">800×480</div><div class="lbl">LCD RGB565</div></div>
+    <div class="stat cyan"><div class="val">115200</div><div class="lbl">USART1 baud</div></div>
+  </div>
+
+  <h2>1. Microcontrôleur STM32N657X0H3Q</h2>
+  <p>Le MCU principal est un STM32N657 en boîtier VFBGA264. Ses caractéristiques clés sont :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Caractéristique</th><th>Valeur</th><th>Rôle dans le projet</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Référence</td><td><code>STM32N657X0H3Q</code></td><td>Plateforme cible définie dans <code>app_config.h</code></td></tr>
+        <tr><td>Cœur</td><td>Arm Cortex-M55 @ 600 MHz</td><td>Exécution du firmware applicatif et du RTOS μT-Kernel</td></tr>
+        <tr><td>NPU</td><td>Unité de traitement neuronal intégrée</td><td>Inférence accélérée du modèle YOLO-X Nano</td></tr>
+        <tr><td>FPU</td><td>FPv5-D16 (double précision)</td><td>Calculs de post-traitement (NMS, IoU)</td></tr>
+        <tr><td>Sécurité</td><td>Arm TrustZone, FSBL secure boot</td><td>Démarrage sécurisé en deux temps (FSBL → Application)</td></tr>
+        <tr><td>Boîtier</td><td>VFBGA264</td><td>Permet de router les bus XSPI hauts débits et MIPI CSI-2</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>2. Mémoires</h2>
+  <p>Le projet exploite plusieurs régions mémoires distinctes, dont l'organisation est imposée par la séparation FSBL / application et par la taille du modèle IA.</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Mémoire</th><th>Type</th><th>Usage</th><th>Mode</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>AXISRAM2 (interne)</td><td>SRAM</td><td>Exécution du FSBL</td><td>Local</td></tr>
+        <tr><td>AXISRAM3-6 (interne)</td><td>SRAM</td><td>Buffers NPU (activations, cache)</td><td>Local · activé via <code>NPURam_enable()</code></td></tr>
+        <tr><td>XSPI1</td><td>RAM externe</td><td>Exécution de l'application (linker <code>STM32N657X0HXQ_LRUN.ld</code>)</td><td>Memory-mapped</td></tr>
+        <tr><td>XSPI2</td><td>NOR flash externe</td><td>Stockage du modèle IA et des poids (~3,6 MB)</td><td>Memory-mapped (XIP)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Activation des mémoires externes</h3>
+  <p>Les bus XSPI sont initialisés au tout début de la tâche principale (<code>main_thread_fct</code>) :</p>
+  <pre><code>BSP_XSPI_RAM_Init(...);   // RAM externe en mode mémoire
+BSP_XSPI_RAM_EnableMemoryMappedMode(...);
+
+BSP_XSPI_NOR_Init(...);   // NOR flash en mode OPI / DTR
+BSP_XSPI_NOR_EnableMemoryMappedMode(...);</code></pre>
+
+  <h2>3. Pipeline caméra (DCMIPP + MIPI CSI-2)</h2>
+  <p>L'acquisition vidéo utilise l'interface <strong>MIPI CSI-2 deux lignes</strong> couplée au contrôleur <strong>DCMIPP</strong> (Digital Camera Memory Interface Pixel Pipeline). Le DCMIPP permet de dériver deux flux à partir d'une même source caméra :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Pipe DCMIPP</th><th>Résolution</th><th>Format</th><th>Destination</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Pipe1</strong> — Display</td><td>800 × 480</td><td>RGB565 (16 bpp)</td><td>Écran LCD via LTDC</td></tr>
+        <tr><td><strong>Pipe2</strong> — NN input</td><td>480 × 480</td><td>RGB888_YUV444_1 (3 bpp)</td><td>Buffer d'entrée du NPU</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Capteurs caméra supportés</h3>
+  <p>Le middleware caméra <code>CMW</code> abstrait trois capteurs MIPI CSI-2 :</p>
+  <ul>
+    <li><strong>Sony IMX335</strong> — capteur 5 MP, profil ISP dans <code>imx335_isp_param_conf.h</code></li>
+    <li><strong>STMicroelectronics VD55G1</strong> — défini par <code>USE_VD55G1_SENSOR</code></li>
+    <li><strong>STMicroelectronics VD66GY (VD6G)</strong> — profil ISP dans <code>vd66gy_isp_param_conf.h</code></li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>⚠️ Cadence d'acquisition</strong>
+    <p>La fréquence de capture est fixée à <code>CAMERA_FPS = 20</code> sur la cible STM32N6570-DK (déclaration dans <code>app_cam.h</code>). L'orientation est contrôlée par <code>CAMERA_FLIP = CMW_MIRRORFLIP_MIRROR</code>.</p>
+  </div>
+
+  <h2>4. Affichage LCD via LTDC</h2>
+  <p>L'écran intégré à la carte (800×480, RGB565) est piloté par le contrôleur <strong>LTDC</strong>. Le projet utilise la bibliothèque <strong>ScreenL (SCRL)</strong>, qui propose deux couches superposées :</p>
+  <ul>
+    <li><strong>LAYER_0</strong> — couche de fond, recevant le flux caméra Pipe1 (RGB565).</li>
+    <li><strong>LAYER_1</strong> — couche d'overlay au format ARGB4444, sur laquelle sont dessinées les boîtes englobantes des survivants détectés et les informations de monitoring (FPS, charge CPU).</li>
+  </ul>
+  <p>Un mécanisme de double buffer assure le rendu sans tearing : la tâche d'affichage écrit dans une zone tampon (<code>dp_update_drawing_area</code>) puis l'échange par bascule de pointeur (<code>dp_commit_drawing_area</code>).</p>
+
+  <h2>5. Console série et débogage</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Périphérique</th><th>Configuration</th><th>Rôle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>USART1</td><td>115200 baud · 8N1</td><td>Console de log (initialisée par <code>CONSOLE_Config()</code>)</td></tr>
+        <tr><td>Broches</td><td>PE5 (TX) · PE6 (RX)</td><td>Liaison série physique</td></tr>
+        <tr><td>SWD</td><td>ST-LINK on-board</td><td>Programmation et débogage temps réel</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>6. Sécurité et boot</h2>
+  <p>Le STM32N6 démarre obligatoirement par un <strong>FSBL</strong> (First Stage Boot Loader) signé, qui s'exécute dans la SRAM interne <code>AXISRAM2</code>. Ce FSBL configure les blocs de sécurité (TrustZone, RIF, IAC), puis transfère l'exécution à l'application principale chargée en RAM externe XSPI1.</p>
+
+  <pre><code>┌─────────────────┐
+│   Power-On      │
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│  FSBL (Secure)  │  Init HW · sécurité · saut application
+│  AXISRAM2       │
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│  Application    │  μT-Kernel + pipeline caméra/IA/affichage
+│  XSPI RAM       │
+└─────────────────┘</code></pre>
+
+  <p>Les configurations de sécurité sont appliquées dans <code>main()</code> via <code>Security_Config()</code> (RIF RIMC/RISC pour NPU, DMA2D, DCMIPP, LTDC, OTG) et <code>IAC_Config()</code>.</p>
+
+  <h2>7. Synthèse des broches utilisées</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Bus / Périphérique</th><th>Broches / Lignes</th><th>Configuration</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>MIPI CSI-2</td><td>2 lignes (data) + clock</td><td>Capteur caméra → DCMIPP</td></tr>
+        <tr><td>LTDC</td><td>RGB565 24 lignes</td><td>Écran 800×480</td></tr>
+        <tr><td>XSPI1</td><td>Octal SPI</td><td>RAM externe memory-mapped</td></tr>
+        <tr><td>XSPI2</td><td>Octal SPI · OPI / DTR</td><td>NOR flash modèle IA</td></tr>
+        <tr><td>USART1</td><td>PE5 / PE6</td><td>Console série 115200 baud</td></tr>
+        <tr><td>I2C1 / I2C2</td><td>—</td><td>Contrôle des capteurs caméra</td></tr>
+        <tr><td>ADC1 / ADC2</td><td>—</td><td>Acquisitions analogiques (réservé)</td></tr>
+        <tr><td>SWD</td><td>SWCLK / SWDIO</td><td>Débogage ST-LINK</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout success">
+    <strong>✅ Pour aller plus loin</strong>
+    <p>L'architecture logicielle qui exploite ce matériel est détaillée dans la section <a href="../02-Architecture-Logicielle/01-vue-ensemble.html"><strong>Architecture Logicielle</strong></a>. La gestion temporelle entre la caméra, le NPU et l'écran est décrite dans le <a href="../04-Sequencage/grafcet.html"><strong>Grafcet fonctionnel</strong></a>.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Architecture Matérielle
+</footer>
+
+</body>
+</html>

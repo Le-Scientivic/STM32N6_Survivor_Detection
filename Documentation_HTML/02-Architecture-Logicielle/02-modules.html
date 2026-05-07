@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>02 — Modules — Architecture Logicielle</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="01-vue-ensemble.html">01 — Vue d'ensemble</a></li>
+    <li><a href="02-modules.html" class="active">02 — Modules</a></li>
+    <li><a href="03-rtos-mtkernel.html">03 — RTOS μT-Kernel</a></li>
+    <li><a href="04-pipeline-ia.html">04 — Pipeline IA</a></li>
+    <li><a href="05-protocole-serie.html">05 — Protocole série</a></li>
+    <li><a href="06-build-deploiement.html">06 — Build &amp; déploiement</a></li>
+    <li><a href="mapping-fonctions.html">🔧 Mapping fonctions</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>Architecture Logicielle</div>
+</nav>
+
+<div class="page-title">
+  <h1>02 — Modules logiciels</h1>
+  <p>Inventaire des fichiers sources applicatifs et rôle de chaque module</p>
+</div>
+
+<div class="container">
+
+  <div class="callout">
+    <strong>📂 Périmètre de cette page</strong>
+    <p>Seuls les modules présents dans <code>Appli/Core/Src</code> et <code>Appli/Core/Inc</code> sont détaillés. Les bibliothèques externes (HAL, BSP, AI Runtime, Camera Middleware, ScreenL, Tracker) sont décrites au niveau de leur API d'usage dans les pages suivantes.</p>
+  </div>
+
+  <h2>2.1 Fichiers sources (.c)</h2>
+  <p>Le code applicatif est organisé en <strong>11 fichiers C</strong>. Les trois plus importants — <code>main.c</code>, <code>app.c</code> et <code>app_cam.c</code> — concentrent la logique métier ; les autres remplissent un rôle d'infrastructure (IRQ, MSP HAL, sécurité, runtime C).</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Fichier</th><th>Rôle principal</th><th>Composant</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>main.c</code></td>
+          <td>Point d'entrée bare-metal : init HAL, caches I/D, horloges système, RAM NPU, sécurité TrustZone, lancement du kernel μT-Kernel.</td>
+          <td>Cœur</td>
+        </tr>
+        <tr>
+          <td><code>app.c</code></td>
+          <td>Pipeline applicatif : crée les tâches RTOS, gère les <em>buffer queues</em> NN, exécute la boucle d'inférence, post-traitement, tracking et affichage.</td>
+          <td>Cœur</td>
+        </tr>
+        <tr>
+          <td><code>app_cam.c</code></td>
+          <td>Initialisation de la caméra via le middleware CMW, configuration des deux pipes DCMIPP (display + NN), mise à jour ISP périodique.</td>
+          <td>Cœur</td>
+        </tr>
+        <tr>
+          <td><code>mtkernel_bsp.c</code></td>
+          <td>Adaptation μT-Kernel ↔ STM32Cube (timer système, priorités IRQ).</td>
+          <td>RTOS</td>
+        </tr>
+        <tr>
+          <td><code>app_fuseprogramming.c</code></td>
+          <td>Programmation des fusibles de sécurité au premier démarrage.</td>
+          <td>Sécurité</td>
+        </tr>
+        <tr>
+          <td><code>secure_nsc.c</code></td>
+          <td>Stubs <em>Non-Secure Callable</em> exposés vers le monde non-sécurisé (TrustZone).</td>
+          <td>Sécurité</td>
+        </tr>
+        <tr>
+          <td><code>stm32n6xx_hal_msp.c</code></td>
+          <td>Callbacks HAL de configuration des broches et horloges des périphériques.</td>
+          <td>HAL</td>
+        </tr>
+        <tr>
+          <td><code>stm32n6xx_it.c</code></td>
+          <td>Vecteurs d'interruption STM32 (handlers IRQ).</td>
+          <td>HAL</td>
+        </tr>
+        <tr>
+          <td><code>stm32_lcd_ex.c</code></td>
+          <td>Extensions de l'API LCD STM32 (formatage texte, primitives graphiques).</td>
+          <td>Affichage</td>
+        </tr>
+        <tr>
+          <td><code>utils.c</code></td>
+          <td>Utilitaires : mesure de la charge CPU, profilage temporel.</td>
+          <td>Outil</td>
+        </tr>
+        <tr>
+          <td><code>syscalls.c</code> · <code>sysmem.c</code></td>
+          <td>Stubs C standard (newlib) : <code>_sbrk</code>, <code>_write</code>…</td>
+          <td>Runtime C</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>2.2 En-têtes (.h)</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>En-tête</th><th>Rôle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>app_config.h</code></td><td>Toutes les constantes runtime (résolutions, seuils YOLO, FPS, tracking).</td></tr>
+        <tr><td><code>app.h</code> · <code>app_cam.h</code> · <code>app_fuseprogramming.h</code></td><td>API publique des modules applicatifs.</td></tr>
+        <tr><td><code>serial_protocol.h</code></td><td>Définition des modules, niveaux et événements du protocole série JSON.</td></tr>
+        <tr><td><code>postprocess_conf.h</code></td><td>Sélection du post-processing (YOLO V2 ou ST YOLOX) selon la cible.</td></tr>
+        <tr><td><code>cmw_camera_conf.h</code> · <code>isp_conf.h</code> · <code>isp_param_conf.h</code></td><td>Configuration des capteurs caméra et de l'ISP.</td></tr>
+        <tr><td><code>imx335_isp_param_conf.h</code> · <code>vd66gy_isp_param_conf.h</code></td><td>Profils ISP par capteur.</td></tr>
+        <tr><td><code>aps256xx_conf.h</code> · <code>mx25um51245g_conf.h</code> · <code>mx66uw1g45g_conf.h</code></td><td>Configurations des mémoires XSPI (RAM externe et flash NOR).</td></tr>
+        <tr><td><code>partition_stm32n657xx.h</code></td><td>Partition mémoire TrustZone (régions secure / non-secure).</td></tr>
+        <tr><td><code>stm32n6xx_hal_conf.h</code> · <code>stm32_assert.h</code></td><td>Configuration HAL et macro <code>assert_param</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>2.3 Schéma de dépendances</h2>
+  <pre><code>main.c
+  ├── HAL / BSP STM32Cube_FW_N6
+  ├── mtkernel_bsp.c → μT-Kernel 3.0
+  └── app.c
+        ├── app_cam.c → CMW Camera Middleware → capteurs IMX335 / VD55G1 / VD66GY
+        ├── network.h (NeuralART AI Runtime) → Modèle YOLO-X
+        ├── postprocess_conf.h → ai-postprocessing-wrapper → lib_vision_models_pp
+        ├── tracker (TRACKER_MODULE)
+        ├── ScreenL (SCRL) → LTDC
+        └── serial_protocol.h → tm_printf (μT-Kernel)</code></pre>
+
+  <h2>2.4 Bibliothèques externes utilisées</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Bibliothèque</th><th>Emplacement</th><th>Service rendu</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>STM32 NeuralART Runtime</td><td><code>Lib/AI_Runtime/</code></td><td>Exécution du réseau YOLO-X sur le NPU</td></tr>
+        <tr><td>Camera Middleware (CMW)</td><td><code>Lib/Camera_Middleware/</code></td><td>Abstraction des capteurs et ISP</td></tr>
+        <tr><td>lib_vision_models_pp</td><td><code>Lib/lib_vision_models_pp/</code></td><td>Post-processing des sorties YOLO (NMS, décodage)</td></tr>
+        <tr><td>ai-postprocessing-wrapper</td><td><code>Lib/ai-postprocessing-wrapper/</code></td><td>Sélection compilée du post-processing approprié</td></tr>
+        <tr><td>Tracker</td><td><code>Lib/tracker/</code></td><td>Suivi d'objets avec ID persistants (filtre de Kalman)</td></tr>
+        <tr><td>ScreenL (SCRL)</td><td><code>Lib/screenl/</code></td><td>Gestion d'un compositeur 2 couches sur LTDC</td></tr>
+        <tr><td>μT-Kernel 3.0 BSP2</td><td><code>Appli/mtk3_bsp2/</code></td><td>Noyau temps réel et services de synchronisation</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout success">
+    <strong>➡️ Étape suivante</strong>
+    <p>La page <a href="03-rtos-mtkernel.html"><strong>03 — RTOS μT-Kernel</strong></a> détaille la mécanique multitâche, et la page <a href="04-pipeline-ia.html"><strong>04 — Pipeline IA</strong></a> trace le flux de données entre la caméra, le NPU et l'écran.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Architecture Logicielle — 02/06
+</footer>
+
+</body>
+</html>

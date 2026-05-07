@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapping fonctions — STM32N6 Survivor Detection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+<style>
+  /* ===== Métriques ===== */
+  .metrics-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:36px; }
+  .metric-card { background:#fff; border:1px solid #e0e6ed; border-radius:14px; padding:20px 22px; box-shadow:0 2px 8px rgba(44,62,80,0.06); }
+  .metric-card .mc-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:#7a8fa3; margin-bottom:6px; }
+  .metric-card .mc-value { font-size:2.2rem; font-weight:700; line-height:1; margin-bottom:3px; }
+  .metric-card .mc-sub { font-size:0.78rem; color:#7a8fa3; }
+  .mc-total  { border-top:3px solid #0e7490; } .mc-total  .mc-value { color:#0e7490; }
+  .mc-edges  { border-top:3px solid #4f46e5; } .mc-edges  .mc-value { color:#4f46e5; }
+  .mc-mods   { border-top:3px solid #16a34a; } .mc-mods   .mc-value { color:#16a34a; }
+  .mc-used   { border-top:3px solid #15803d; } .mc-used   .mc-value { color:#15803d; }
+  .mc-dead   { border-top:3px solid #dc2626; } .mc-dead   .mc-value { color:#dc2626; }
+  .mc-ep     { border-top:3px solid #d97706; } .mc-ep     .mc-value { color:#d97706; }
+
+  /* ===== Section header ===== */
+  .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; margin-top:36px; flex-wrap:wrap; gap:10px; }
+  .section-header .section-title { font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#7a8fa3; margin:0; }
+  .section-header .section-title::after { display:none; }
+
+  /* ===== Toolbar ===== */
+  .toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 18px; border:1px solid #e0e6ed; border-radius:12px; background:#fff; margin-bottom:16px; box-shadow:0 2px 8px rgba(44,62,80,0.05); }
+  .toolbar input[type=search] { flex:1; min-width:200px; padding:7px 12px; border:1px solid #dde3ed; border-radius:8px; font-family:inherit; font-size:0.85rem; color:#2c3e50; outline:none; transition:border-color 0.15s; }
+  .toolbar input[type=search]:focus { border-color:#0e7490; }
+  .toolbar select { padding:7px 10px; border:1px solid #dde3ed; border-radius:8px; font-family:inherit; font-size:0.82rem; color:#2c3e50; outline:none; background:#fff; cursor:pointer; transition:border-color 0.15s; }
+  .toolbar select:focus { border-color:#0e7490; }
+  .toolbar label { font-size:0.8rem; color:#7a8fa3; font-weight:500; white-space:nowrap; }
+  #result-count { font-size:0.8rem; color:#7a8fa3; white-space:nowrap; margin-left:auto; }
+
+  /* ===== Tableau ===== */
+  .fn-wrap { background:#fff; border:1px solid #e0e6ed; border-radius:14px; overflow:hidden; box-shadow:0 2px 8px rgba(44,62,80,0.06); }
+  .fn-wrap table { width:100%; border-collapse:collapse; }
+  .fn-wrap thead th { padding:12px 14px; text-align:left; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#7a8fa3; background:#f8fafc; border-bottom:2px solid #e0e6ed; cursor:pointer; user-select:none; white-space:nowrap; }
+  .fn-wrap thead th:hover { color:#0e7490; }
+  .fn-wrap thead th .sort-icon { margin-left:4px; opacity:0.4; font-size:0.65rem; }
+  .fn-wrap thead th.sorted-asc .sort-icon::after  { content:" ▲"; opacity:1; }
+  .fn-wrap thead th.sorted-desc .sort-icon::after { content:" ▼"; opacity:1; }
+  .fn-wrap tbody tr { border-bottom:1px solid #f0f3f6; transition:background 0.1s; cursor:pointer; }
+  .fn-wrap tbody tr:last-child { border-bottom:none; }
+  .fn-wrap tbody tr:hover { background:#f0f7ff; }
+  .fn-wrap tbody td { padding:10px 14px; font-size:0.82rem; color:#2c3e50; vertical-align:middle; }
+  td.td-name { font-weight:600; font-family:'Cascadia Mono','Consolas',monospace; color:#1e40af; }
+  td.td-file { font-family:'Cascadia Mono','Consolas',monospace; font-size:0.75rem; color:#7a8fa3; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  td.td-desc { max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#5a6a7a; }
+  td.td-num { text-align:center; font-weight:600; }
+
+  /* ===== Tags ===== */
+  .tag { display:inline-block; padding:2px 9px; border-radius:10px; font-size:0.7rem; font-weight:600; white-space:nowrap; }
+  .tag-cat-core     { background:#dbeafe; color:#1e40af; }
+  .tag-cat-driver   { background:#fce7f3; color:#9d174d; }
+  .tag-cat-display  { background:#f3e8ff; color:#6b21a8; }
+  .tag-cat-security { background:#fef3c7; color:#92400e; }
+  .tag-cat-util     { background:#f1f5f9; color:#475569; }
+  .tag-st-used         { background:#dcfce7; color:#166534; }
+  .tag-st-entry_point  { background:#fef3c7; color:#92400e; }
+  .tag-st-dead_code    { background:#fee2e2; color:#991b1b; }
+
+  /* ===== Pagination ===== */
+  .pagination { display:flex; align-items:center; justify-content:center; gap:6px; padding:16px 20px; border-top:1px solid #e0e6ed; background:#f8fafc; }
+  .page-btn { padding:5px 12px; border:1px solid #e0e6ed; border-radius:7px; background:#fff; font-family:inherit; font-size:0.82rem; font-weight:600; cursor:pointer; color:#5a7a93; transition:all 0.15s; }
+  .page-btn:hover:not(:disabled) { background:#eef2ff; border-color:#a5b4fc; color:#4f46e5; }
+  .page-btn.active { background:#0e7490; color:#fff; border-color:#0e7490; }
+  .page-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+  /* ===== Catégories / cards modules ===== */
+  .cat-section { margin-bottom:22px; }
+  .cat-header { display:flex; align-items:center; gap:12px; margin:14px 0 10px; padding:10px 16px; border-radius:10px; border-left:4px solid #94a3b8; background:#f8fafc; cursor:pointer; transition:filter 0.12s ease; user-select:none; }
+  .cat-header:hover { filter:brightness(0.97); }
+  .cat-header.cat-core     { border-left-color:#2563eb; background:#dbeafe; }
+  .cat-header.cat-driver   { border-left-color:#db2777; background:#fce7f3; }
+  .cat-header.cat-display  { border-left-color:#7c3aed; background:#f3e8ff; }
+  .cat-header.cat-security { border-left-color:#d97706; background:#fef3c7; }
+  .cat-header.cat-util     { border-left-color:#475569; background:#f1f5f9; }
+  .cat-icon { font-size:1.3rem; line-height:1; flex-shrink:0; }
+  .cat-title-block { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+  .cat-name { font-weight:700; font-size:0.92rem; color:#2c3e50; text-transform:uppercase; letter-spacing:0.05em; }
+  .cat-desc { font-size:0.76rem; color:#5a7a93; line-height:1.4; }
+  .cat-count { background:#fff; border:1px solid #e0e6ed; padding:3px 11px; border-radius:14px; font-size:0.74rem; font-weight:700; color:#2c3e50; white-space:nowrap; flex-shrink:0; }
+  .cat-toggle { cursor:pointer; user-select:none; transition:transform 0.2s ease; color:#7a8fa3; font-size:0.9rem; flex-shrink:0; padding:2px 6px; }
+  .cat-section.collapsed .cat-toggle { transform:rotate(-90deg); }
+  .cat-section.collapsed .module-grid { display:none; }
+  .module-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+  .mod-card { background:#fff; border:1px solid #e0e6ed; border-radius:12px; padding:14px 16px; box-shadow:0 2px 6px rgba(44,62,80,0.05); transition:transform 0.15s, box-shadow 0.15s; cursor:pointer; }
+  .mod-card:hover { transform:translateY(-3px); box-shadow:0 8px 20px rgba(44,62,80,0.10); }
+  .mod-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .mod-card-name { font-size:0.92rem; font-weight:700; color:#2c3e50; font-family:'Cascadia Mono','Consolas',monospace; }
+  .mod-bar-wrap { background:#f0f3f6; border-radius:4px; height:6px; margin:8px 0 4px; overflow:hidden; }
+  .mod-bar { height:6px; border-radius:4px; background:#0e7490; transition:width 0.4s; }
+  .mod-stats { display:flex; gap:14px; font-size:0.74rem; color:#7a8fa3; margin-top:6px; }
+  .mod-stats span strong { color:#2c3e50; }
+
+  /* ===== Modales ===== */
+  .modal-overlay { position:fixed; inset:0; z-index:1100; background:rgba(30,40,55,0.45); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity 0.2s; display:flex; align-items:center; justify-content:center; padding:30px; }
+  .modal-overlay.open { opacity:1; pointer-events:auto; }
+  .modal { background:#fff; border-radius:16px; max-width:760px; width:100%; max-height:88vh; box-shadow:0 20px 60px rgba(44,62,80,0.22); transform:translateY(20px); transition:transform 0.2s; display:flex; flex-direction:column; overflow:hidden; }
+  .modal-overlay.open .modal { transform:translateY(0); }
+  .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:18px 22px 14px; border-bottom:1px solid #e0e6ed; background:linear-gradient(180deg,#f8fafc 0%, #fff 100%); }
+  .modal-title { font-size:1.05rem; font-weight:700; color:#2c3e50; font-family:'Cascadia Mono','Consolas',monospace; }
+  .modal-meta { margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; }
+  .modal-close { background:none; border:none; font-size:1.4rem; color:#7a8fa3; cursor:pointer; line-height:1; padding:0 4px; transition:color 0.15s; }
+  .modal-close:hover { color:#dc2626; }
+  .modal-body { padding:18px 22px 22px; overflow-y:auto; }
+  .modal-section { margin-bottom:18px; }
+  .modal-section h4 { font-size:0.74rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#7a8fa3; margin-bottom:8px; }
+  .modal-section .signature { background:#0f172a; color:#e2e8f0; padding:10px 14px; border-radius:8px; font-family:'Cascadia Mono','Consolas',monospace; font-size:0.8rem; overflow-x:auto; }
+  .modal-section p { color:#3d4a5a; font-size:0.88rem; line-height:1.55; margin:0; }
+  .stat-pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .stat-box { background:#f8fafc; border:1px solid #e0e6ed; border-radius:10px; padding:10px 14px; text-align:center; }
+  .stat-box .v { font-size:1.4rem; font-weight:700; color:#2c3e50; }
+  .stat-box .l { font-size:0.72rem; color:#7a8fa3; text-transform:uppercase; letter-spacing:0.05em; }
+  .stat-box.out .v { color:#4f46e5; }
+  .stat-box.inp .v { color:#16a34a; }
+  .ref-list { display:flex; flex-wrap:wrap; gap:6px; }
+  .ref-item { padding:4px 10px; background:#f0f4f8; border:1px solid #d4dce6; border-radius:6px; font-size:0.78rem; font-family:'Cascadia Mono','Consolas',monospace; color:#1e40af; cursor:pointer; transition:background 0.12s; }
+  .ref-item:hover { background:#dbeafe; border-color:#93c5fd; }
+  .ref-empty { font-size:0.82rem; color:#94a3b8; font-style:italic; }
+  .file-line { font-family:'Cascadia Mono','Consolas',monospace; font-size:0.82rem; color:#475569; background:#f0f4f8; padding:6px 10px; border-radius:6px; display:inline-block; }
+
+  /* ===== Code source viewer ===== */
+  .code-wrap { background:#0f172a; border:1px solid #1e293b; border-radius:10px; overflow:hidden; max-height:480px; display:flex; flex-direction:column; }
+  .code-head { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:#1e293b; border-bottom:1px solid #334155; font-size:0.74rem; font-family:'Cascadia Mono','Consolas',monospace; color:#94a3b8; }
+  .code-head .code-path { color:#60a5fa; }
+  .code-head .code-actions { display:flex; gap:6px; }
+  .code-copy-btn { background:#334155; border:1px solid #475569; color:#cbd5e1; padding:3px 10px; border-radius:5px; font-size:0.72rem; font-family:inherit; cursor:pointer; transition:background 0.12s; }
+  .code-copy-btn:hover { background:#475569; color:#fff; }
+  .code-copy-btn.copied { background:#16a34a; border-color:#15803d; color:#fff; }
+  .code-body { display:flex; overflow:auto; max-height:430px; flex:1; }
+  .code-body pre { margin:0; padding:12px 0; background:transparent; border:none; font-family:'Cascadia Mono','Consolas',monospace; font-size:0.78rem; line-height:1.55; }
+  .code-lines { padding:12px 8px 12px 14px; color:#475569; text-align:right; user-select:none; border-right:1px solid #1e293b; background:#0a0f1c; flex-shrink:0; }
+  .code-lines pre { color:#475569; }
+  .code-content { flex:1; overflow-x:auto; }
+  .code-content pre code { color:#e2e8f0; padding:0 14px; display:block; }
+  .code-content .kw  { color:#c084fc; }     /* keywords */
+  .code-content .typ { color:#60a5fa; }     /* types */
+  .code-content .com { color:#64748b; font-style:italic; } /* comments */
+  .code-content .str { color:#86efac; }     /* strings */
+  .code-content .num { color:#fbbf24; }     /* numbers */
+  .code-content .pre { color:#f472b6; }     /* preprocessor */
+  .code-empty { padding:30px; text-align:center; color:#64748b; font-style:italic; font-size:0.85rem; }
+
+  /* No results */
+  .no-results { text-align:center; padding:40px 20px; color:#7a8fa3; font-size:0.9rem; }
+</style>
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="01-vue-ensemble.html">01 — Vue d'ensemble</a></li>
+    <li><a href="02-modules.html">02 — Modules</a></li>
+    <li><a href="03-rtos-mtkernel.html">03 — RTOS μT-Kernel</a></li>
+    <li><a href="04-pipeline-ia.html">04 — Pipeline IA</a></li>
+    <li><a href="05-protocole-serie.html">05 — Protocole série</a></li>
+    <li><a href="06-build-deploiement.html">06 — Build &amp; déploiement</a></li>
+    <li><a href="mapping-fonctions.html" class="active">🔧 Mapping fonctions</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>Architecture Logicielle</div>
+</nav>
+
+<div class="page-title">
+  <h1>Mapping fonctions</h1>
+  <p>Cartographie complète des fonctions applicatives — fichiers, dépendances, paramètres et signatures</p>
+</div>
+
+<main>
+
+  <div class="metrics-grid">
+    <div class="metric-card mc-total"><div class="mc-label">Fonctions analysées</div><div class="mc-value" id="mt-total">—</div><div class="mc-sub">Définies dans Appli/Core/Src</div></div>
+    <div class="metric-card mc-edges"><div class="mc-label">Liaisons internes</div><div class="mc-value" id="mt-edges">—</div><div class="mc-sub">Appels entre fonctions du projet</div></div>
+    <div class="metric-card mc-mods"><div class="mc-label">Modules</div><div class="mc-value" id="mt-mods">—</div><div class="mc-sub">Fichiers .c distincts</div></div>
+    <div class="metric-card mc-ep"><div class="mc-label">Points d'entrée</div><div class="mc-value" id="mt-ep">—</div><div class="mc-sub">main, usermain, threads RTOS</div></div>
+    <div class="metric-card mc-used"><div class="mc-label">Fonctions utilisées</div><div class="mc-value" id="mt-used">—</div><div class="mc-sub">status = used / entry_point</div></div>
+    <div class="metric-card mc-dead"><div class="mc-label">Code mort</div><div class="mc-value" id="mt-dead">—</div><div class="mc-sub">Détecté dans le code interne</div></div>
+  </div>
+
+  <div class="section-header">
+    <h2 class="section-title">Vue par modules</h2>
+  </div>
+  <div id="modules-view"></div>
+
+  <div class="section-header">
+    <h2 class="section-title">Liste des fonctions</h2>
+  </div>
+
+  <div class="toolbar">
+    <input type="search" id="search-input" placeholder="🔍 Rechercher (nom, fichier, description)…">
+    <label>Catégorie
+      <select id="filter-cat">
+        <option value="">Toutes</option>
+      </select>
+    </label>
+    <label>Module
+      <select id="filter-mod">
+        <option value="">Tous</option>
+      </select>
+    </label>
+    <label>Statut
+      <select id="filter-status">
+        <option value="">Tous</option>
+      </select>
+    </label>
+    <label>Par page
+      <select id="page-size">
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+        <option value="500">Tout</option>
+      </select>
+    </label>
+    <span id="result-count">— résultats</span>
+  </div>
+
+  <div class="fn-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-col="name">Fonction <span class="sort-icon"></span></th>
+          <th data-col="module">Fichier <span class="sort-icon"></span></th>
+          <th data-col="category">Catégorie <span class="sort-icon"></span></th>
+          <th data-col="status">Statut <span class="sort-icon"></span></th>
+          <th data-col="out">Sorties <span class="sort-icon"></span></th>
+          <th data-col="inp">Entrées <span class="sort-icon"></span></th>
+          <th data-col="line">Ligne <span class="sort-icon"></span></th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody id="fn-tbody"></tbody>
+    </table>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+</main>
+
+<!-- Modal Fonction -->
+<div class="modal-overlay" id="fn-modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="fn-modal-title"></div>
+        <div class="modal-meta" id="fn-modal-meta"></div>
+      </div>
+      <button class="modal-close" id="fn-modal-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-body" id="fn-modal-body"></div>
+  </div>
+</div>
+
+<!-- Modal Module -->
+<div class="modal-overlay" id="mod-modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="mod-modal-title"></div>
+        <div class="modal-meta" id="mod-modal-meta"></div>
+      </div>
+      <button class="modal-close" id="mod-modal-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-body" id="mod-modal-body"></div>
+  </div>
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Mapping fonctions — extraction du code Appli/Core/Src
+</footer>
+
+<!-- Code source des 99 fonctions extraites des fichiers .c -->
+<script src="function-codes.js"></script>
+
+<script>
+/* =========================================================
+   DONNÉES — extraites du code source STM32N6_Survivor_Detection
+   ========================================================= */
+const MODULES_META = {
+  "main":              { category:"core",     icon:"⚙️",  description:"Initialisation système et lancement RTOS" },
+  "app":               { category:"core",     icon:"🎯",  description:"Pipeline applicatif et tâches concurrentes" },
+  "app_cam":           { category:"core",     icon:"📷",  description:"Initialisation caméra et configuration DCMIPP" },
+  "mtkernel_bsp":      { category:"core",     icon:"🧩",  description:"Adaptation μT-Kernel ↔ STM32 HAL" },
+  "stm32n6xx_hal_msp": { category:"driver",   icon:"🔌",  description:"MSP HAL — broches et horloges périphériques" },
+  "stm32n6xx_it":      { category:"driver",   icon:"⚡",  description:"Vecteurs et handlers d'interruption" },
+  "secure_nsc":        { category:"security", icon:"🔒",  description:"Stubs Non-Secure Callable (TrustZone)" },
+  "app_fuseprogramming":{category:"security", icon:"🔥",  description:"Programmation fusibles OTP au boot" },
+  "stm32_lcd_ex":      { category:"display",  icon:"🖥️",  description:"Extensions API LCD STM32 (texte formaté)" },
+  "utils":             { category:"util",     icon:"🛠️",  description:"Wrapper d'inférence neural network" },
+  "syscalls":          { category:"util",     icon:"📞",  description:"Stubs newlib (_read, _write, _exit…)" },
+  "sysmem":            { category:"util",     icon:"💾",  description:"Allocateur mémoire heap (_sbrk)" }
+};
+
+const CATEGORIES = {
+  "core":     { label:"Cœur applicatif",      icon:"⚙️",  description:"Logique métier principale du firmware" },
+  "driver":   { label:"Drivers & ISR",        icon:"🔌",  description:"Couche pilotes et handlers d'interruption" },
+  "display":  { label:"Affichage",            icon:"🖥️",  description:"Rendu sur écran LCD" },
+  "security": { label:"Sécurité",             icon:"🔒",  description:"Sécurité TrustZone et OTP" },
+  "util":     { label:"Utilitaires & runtime",icon:"🛠️",  description:"Stubs C standard et helpers" }
+};
+
+const FUNCTIONS = [
+  {name:"main", module:"main", file:"Appli/Core/Src/main.c", line:53, status:"entry_point", signature:"int main(void)", description:"Point d'entrée bare-metal — init HAL et bootstrap μT-Kernel", callees:["CONSOLE_Config","SystemClock_Config","NPURam_enable","Fuse_Programming","NPUCache_config","Security_Config","IAC_Config"]},
+  {name:"usermain", module:"main", file:"Appli/Core/Src/main.c", line:87, status:"entry_point", signature:"INT usermain(void)", description:"Entry-point μT-Kernel — création de la tâche principale", callees:[]},
+  {name:"main_thread_fct", module:"main", file:"Appli/Core/Src/main.c", line:112, status:"entry_point", signature:"void main_thread_fct(INT stacd, void *exinf)", description:"Tâche principale — init RAM/flash externes puis app_run()", callees:["app_run"]},
+  {name:"CONSOLE_Config", module:"main", file:"Appli/Core/Src/main.c", line:163, status:"used", signature:"void CONSOLE_Config(void)", description:"Configure USART1 pour la console série (115200 baud)", callees:[]},
+  {name:"SystemClock_Config", module:"main", file:"Appli/Core/Src/main.c", line:196, status:"used", signature:"void SystemClock_Config(void)", description:"Configuration des PLL et arbres d'horloges (CPU 600 MHz)", callees:[]},
+  {name:"NPURam_enable", module:"main", file:"Appli/Core/Src/main.c", line:294, status:"used", signature:"void NPURam_enable(void)", description:"Active les blocs RAM internes utilisés par le NPU", callees:[]},
+  {name:"NPUCache_config", module:"main", file:"Appli/Core/Src/main.c", line:320, status:"used", signature:"void NPUCache_config(void)", description:"Initialise et active le cache NPU", callees:[]},
+  {name:"Security_Config", module:"main", file:"Appli/Core/Src/main.c", line:330, status:"used", signature:"void Security_Config(void)", description:"Configure la sécurité TrustZone (RIF) sur les périphériques", callees:[]},
+  {name:"IAC_Config", module:"main", file:"Appli/Core/Src/main.c", line:357, status:"used", signature:"void IAC_Config(void)", description:"Configure l'Illegal Access Controller", callees:[]},
+  {name:"MX_DCMIPP_ClockConfig", module:"main", file:"Appli/Core/Src/main.c", line:369, status:"used", signature:"HAL_StatusTypeDef MX_DCMIPP_ClockConfig(DCMIPP_HandleTypeDef *hdcmipp)", description:"Configure l'horloge et le sélecteur d'IC du DCMIPP", callees:[]},
+  {name:"HAL_CACHEAXI_MspInit", module:"main", file:"Appli/Core/Src/main.c", line:397, status:"used", signature:"void HAL_CACHEAXI_MspInit(CACHEAXI_HandleTypeDef *hcacheaxi)", description:"Init MSP du cache AXI", callees:[]},
+  {name:"HAL_CACHEAXI_MspDeInit", module:"main", file:"Appli/Core/Src/main.c", line:410, status:"used", signature:"void HAL_CACHEAXI_MspDeInit(CACHEAXI_HandleTypeDef *hcacheaxi)", description:"Désinit MSP du cache AXI", callees:[]},
+  {name:"Error_Handler", module:"main", file:"Appli/Core/Src/main.c", line:421, status:"used", signature:"void Error_Handler(void)", description:"Handler d'erreur — boucle infinie", callees:[]},
+  {name:"assert_failed", module:"main", file:"Appli/Core/Src/main.c", line:430, status:"used", signature:"void assert_failed(uint8_t *file, uint32_t line)", description:"Handler d'assertion (build DEBUG)", callees:[]},
+
+  {name:"is_cache_enable", module:"app", file:"Appli/Core/Src/app.c", line:243, status:"used", signature:"int is_cache_enable(void)", description:"Vérifie si le D-Cache est activé", callees:[]},
+  {name:"cpuload_init", module:"app", file:"Appli/Core/Src/app.c", line:252, status:"used", signature:"void cpuload_init(cpuload_info_t *cpu_load)", description:"Initialise la structure de mesure de charge CPU", callees:[]},
+  {name:"cpuload_update", module:"app", file:"Appli/Core/Src/app.c", line:257, status:"used", signature:"void cpuload_update(cpuload_info_t *cpu_load)", description:"Met à jour l'historique de charge CPU (8 ticks)", callees:[]},
+  {name:"cpuload_get_info", module:"app", file:"Appli/Core/Src/app.c", line:273, status:"used", signature:"void cpuload_get_info(cpuload_info_t *cpu_load, float *l, float *l1s, float *l5s)", description:"Calcule les pourcentages de charge CPU sur 1s et 5s", callees:[]},
+  {name:"bqueue_init", module:"app", file:"Appli/Core/Src/app.c", line:287, status:"used", signature:"int bqueue_init(bqueue_t *bq, int n, uint8_t **buffers)", description:"Initialise une buffer queue avec sémaphores free/ready", callees:[]},
+  {name:"bqueue_get_free", module:"app", file:"Appli/Core/Src/app.c", line:327, status:"used", signature:"uint8_t* bqueue_get_free(bqueue_t *bq, int blocking)", description:"Récupère un buffer libre depuis la queue", callees:[]},
+  {name:"bqueue_put_free", module:"app", file:"Appli/Core/Src/app.c", line:342, status:"used", signature:"void bqueue_put_free(bqueue_t *bq)", description:"Signale la disponibilité d'un buffer libre", callees:[]},
+  {name:"bqueue_get_ready", module:"app", file:"Appli/Core/Src/app.c", line:350, status:"used", signature:"uint8_t* bqueue_get_ready(bqueue_t *bq)", description:"Attend et récupère un buffer prêt depuis la queue", callees:[]},
+  {name:"bqueue_put_ready", module:"app", file:"Appli/Core/Src/app.c", line:364, status:"used", signature:"void bqueue_put_ready(bqueue_t *bq)", description:"Signale la disponibilité d'un buffer prêt", callees:[]},
+  {name:"reload_bg_layer", module:"app", file:"Appli/Core/Src/app.c", line:372, status:"used", signature:"void reload_bg_layer(int next_disp_idx)", description:"Configure l'adresse du layer de fond et déclenche reload", callees:[]},
+  {name:"app_main_pipe_frame_event", module:"app", file:"Appli/Core/Src/app.c", line:385, status:"used", signature:"void app_main_pipe_frame_event(void)", description:"Callback frame du Pipe1 DCMIPP — bascule du buffer affichage", callees:["reload_bg_layer"]},
+  {name:"app_ancillary_pipe_frame_event", module:"app", file:"Appli/Core/Src/app.c", line:400, status:"used", signature:"void app_ancillary_pipe_frame_event(void)", description:"Callback frame du Pipe2 DCMIPP — push buffer NN", callees:["bqueue_get_free","bqueue_put_ready"]},
+  {name:"app_main_pipe_vsync_event", module:"app", file:"Appli/Core/Src/app.c", line:415, status:"used", signature:"void app_main_pipe_vsync_event(void)", description:"Callback VSYNC — signale le sémaphore isp_sem", callees:[]},
+  {name:"clamp_point", module:"app", file:"Appli/Core/Src/app.c", line:423, status:"used", signature:"int clamp_point(int *x, int *y)", description:"Clamp les coordonnées d'un point dans la zone d'affichage", callees:[]},
+  {name:"convert_length", module:"app", file:"Appli/Core/Src/app.c", line:440, status:"used", signature:"void convert_length(float32_t wi, float32_t hi, int *wo, int *ho)", description:"Convertit longueurs normalisées NN → coordonnées écran", callees:[]},
+  {name:"convert_point", module:"app", file:"Appli/Core/Src/app.c", line:446, status:"used", signature:"void convert_point(float32_t xi, float32_t yi, int *xo, int *yo)", description:"Convertit point normalisé NN → coordonnées écran", callees:[]},
+  {name:"Display_Detection", module:"app", file:"Appli/Core/Src/app.c", line:452, status:"used", signature:"void Display_Detection(od_pp_outBuffer_t *detect)", description:"Trace une boîte englobante et son label sur l'écran", callees:["convert_point","convert_length","clamp_point"]},
+  {name:"Display_NetworkOutput_NoTracking", module:"app", file:"Appli/Core/Src/app.c", line:472, status:"used", signature:"void Display_NetworkOutput_NoTracking(display_info_t *info)", description:"Affiche les détections sans tracker (boîtes brutes)", callees:["cpuload_update","cpuload_get_info","Display_Detection"]},
+  {name:"model_get_output_nb", module:"app", file:"Appli/Core/Src/app.c", line:545, status:"used", signature:"int model_get_output_nb(const LL_Buffer_InfoTypeDef *nn_out_info)", description:"Compte le nombre de buffers de sortie du réseau", callees:[]},
+  {name:"Display_TrackingBox", module:"app", file:"Appli/Core/Src/app.c", line:559, status:"used", signature:"void Display_TrackingBox(tbox_info *tbox)", description:"Trace une boîte trackée avec son ID persistant", callees:["convert_point","convert_length","clamp_point"]},
+  {name:"Display_NetworkOutput_Tracking", module:"app", file:"Appli/Core/Src/app.c", line:579, status:"used", signature:"void Display_NetworkOutput_Tracking(display_info_t *info)", description:"Affiche les détections avec IDs de tracking", callees:["cpuload_update","cpuload_get_info","Display_TrackingBox"]},
+  {name:"Display_NetworkOutput", module:"app", file:"Appli/Core/Src/app.c", line:659, status:"used", signature:"void Display_NetworkOutput(display_info_t *info)", description:"Route vers le mode tracking ou non selon la config", callees:["Display_NetworkOutput_Tracking","Display_NetworkOutput_NoTracking"]},
+  {name:"nn_thread_fct", module:"app", file:"Appli/Core/Src/app.c", line:667, status:"entry_point", signature:"void nn_thread_fct(INT stacd, void *exinf)", description:"Tâche d'inférence NPU — boucle Run_Inference()", callees:["model_get_output_nb","bqueue_get_free","CAM_NNPipe_Start","bqueue_get_ready","bqueue_put_free","bqueue_put_ready","Run_Inference"]},
+  {name:"TRK_Init", module:"app", file:"Appli/Core/Src/app.c", line:749, status:"used", signature:"int TRK_Init(void)", description:"Initialise le tracker d'objets avec ses seuils", callees:[]},
+  {name:"update_and_capture_tracking_enabled", module:"app", file:"Appli/Core/Src/app.c", line:762, status:"used", signature:"int update_and_capture_tracking_enabled(void)", description:"Bascule le tracking selon état du bouton utilisateur", callees:["TRK_Init"]},
+  {name:"roi_to_dbox", module:"app", file:"Appli/Core/Src/app.c", line:787, status:"used", signature:"void roi_to_dbox(od_pp_outBuffer_t *roi, trk_dbox_t *dbox)", description:"Convertit ROI YOLO → format détection tracker", callees:[]},
+  {name:"app_tracking", module:"app", file:"Appli/Core/Src/app.c", line:796, status:"used", signature:"int app_tracking(od_pp_out_t *pp)", description:"Met à jour le tracker avec les détections courantes", callees:["update_and_capture_tracking_enabled","roi_to_dbox"]},
+  {name:"tbox_to_tbox_info", module:"app", file:"Appli/Core/Src/app.c", line:814, status:"used", signature:"void tbox_to_tbox_info(trk_tbox_t *tbox, tbox_info *tinfo)", description:"Convertit boîte tracker → structure d'info pour affichage", callees:[]},
+  {name:"pp_thread_fct", module:"app", file:"Appli/Core/Src/app.c", line:829, status:"entry_point", signature:"void pp_thread_fct(INT stacd, void *exinf)", description:"Tâche post-traitement (NMS) et tracking", callees:["bqueue_get_ready","bqueue_put_free","app_tracking"]},
+  {name:"dp_update_drawing_area", module:"app", file:"Appli/Core/Src/app.c", line:913, status:"used", signature:"void dp_update_drawing_area(void)", description:"Configure le buffer d'écriture pour le layer foreground", callees:[]},
+  {name:"dp_commit_drawing_area", module:"app", file:"Appli/Core/Src/app.c", line:927, status:"used", signature:"void dp_commit_drawing_area(void)", description:"Bascule le buffer affichage et fait le clean cache", callees:[]},
+  {name:"dp_thread_fct", module:"app", file:"Appli/Core/Src/app.c", line:940, status:"entry_point", signature:"void dp_thread_fct(INT stacd, void *exinf)", description:"Tâche d'affichage — rendu LCD des détections", callees:["dp_update_drawing_area","Display_NetworkOutput","dp_commit_drawing_area"]},
+  {name:"isp_thread_fct", module:"app", file:"Appli/Core/Src/app.c", line:986, status:"entry_point", signature:"void isp_thread_fct(INT stacd, void *exinf)", description:"Tâche ISP — mise à jour balance des blancs/exposition", callees:["CAM_IspUpdate"]},
+  {name:"Display_init", module:"app", file:"Appli/Core/Src/app.c", line:1001, status:"used", signature:"void Display_init(void)", description:"Initialise le compositeur écran (2 layers SCRL)", callees:[]},
+  {name:"app_run", module:"app", file:"Appli/Core/Src/app.c", line:1038, status:"entry_point", signature:"void app_run(void)", description:"Boucle principale — crée les 4 tâches et démarre la caméra", callees:["cpuload_init","Display_init","bqueue_init","CAM_Init","CAM_DisplayPipe_Start"]},
+  {name:"CMW_CAMERA_PIPE_FrameEventCallback", module:"app", file:"Appli/Core/Src/app.c", line:1137, status:"used", signature:"int CMW_CAMERA_PIPE_FrameEventCallback(uint32_t pipe)", description:"Dispatch des frames DCMIPP vers les handlers internes", callees:["app_main_pipe_frame_event","app_ancillary_pipe_frame_event"]},
+  {name:"CMW_CAMERA_PIPE_VsyncEventCallback", module:"app", file:"Appli/Core/Src/app.c", line:1147, status:"used", signature:"int CMW_CAMERA_PIPE_VsyncEventCallback(uint32_t pipe)", description:"Dispatch des VSYNC DCMIPP vers le handler interne", callees:["app_main_pipe_vsync_event"]},
+
+  {name:"CAM_InitCropConfig", module:"app_cam", file:"Appli/Core/Src/app_cam.c", line:29, status:"used", signature:"void CAM_InitCropConfig(CMW_Manual_roi_area_t *roi, int w, int h)", description:"Configure une zone de crop pour conserver l'aspect ratio", callees:[]},
+  {name:"DCMIPP_PipeInitDisplay", module:"app_cam", file:"Appli/Core/Src/app_cam.c", line:44, status:"used", signature:"void DCMIPP_PipeInitDisplay(int sw, int sh)", description:"Configure le Pipe1 DCMIPP — sortie LCD RGB565", callees:["CAM_InitCropConfig"]},
+  {name:"DCMIPP_PipeInitNn", module:"app_cam", file:"Appli/Core/Src/app_cam.c", line:65, status:"used", signature:"void DCMIPP_PipeInitNn(int sw, int sh)", description:"Configure le Pipe2 DCMIPP — entrée NN avec scaling", callees:["CAM_InitCropConfig"]},
+  {name:"CAM_Init", module:"app_cam", file:"Appli/Core/Src/app_cam.c", line:84, status:"used", signature:"void CAM_Init(void)", description:"Initialise capteur caméra et les deux pipes DCMIPP", callees:["DCMIPP_PipeInitDisplay","DCMIPP_PipeInitNn"]},
+  {name:"CAM_DisplayPipe_Start", module:"app_cam", file:"Appli/Core/Src/app_cam.c", line:104, status:"used", signature:"void CAM_DisplayPipe_Start(uint8_t *dst, uint32_t mode)", description:"Démarre l'acquisition continue sur le Pipe1", callees:[]},
+  {name:"CAM_NNPipe_Start", module:"app_cam", file:"Appli/Core/Src/app_cam.c", line:112, status:"used", signature:"void CAM_NNPipe_Start(uint8_t *dst, uint32_t mode)", description:"Démarre l'acquisition continue sur le Pipe2", callees:[]},
+  {name:"CAM_IspUpdate", module:"app_cam", file:"Appli/Core/Src/app_cam.c", line:120, status:"used", signature:"void CAM_IspUpdate(void)", description:"Exécute une étape ISP (balance blancs, exposition)", callees:[]},
+
+  {name:"HAL_GetTick", module:"mtkernel_bsp", file:"Appli/Core/Src/mtkernel_bsp.c", line:40, status:"used", signature:"uint32_t HAL_GetTick(void)", description:"Tick système STM32 HAL relayé vers μT-Kernel", callees:[]},
+  {name:"HAL_Delay", module:"mtkernel_bsp", file:"Appli/Core/Src/mtkernel_bsp.c", line:53, status:"used", signature:"void HAL_Delay(uint32_t Delay)", description:"Délai bloquant en millisecondes", callees:[]},
+  {name:"HAL_InitTick", module:"mtkernel_bsp", file:"Appli/Core/Src/mtkernel_bsp.c", line:66, status:"used", signature:"HAL_StatusTypeDef HAL_InitTick(uint32_t prio)", description:"No-op (le tick est géré par μT-Kernel)", callees:[]},
+  {name:"TIM4_Config", module:"mtkernel_bsp", file:"Appli/Core/Src/mtkernel_bsp.c", line:76, status:"used", signature:"void TIM4_Config(void)", description:"Configure TIM4 comme timer haute résolution", callees:[]},
+  {name:"TIM4_Get_Value", module:"mtkernel_bsp", file:"Appli/Core/Src/mtkernel_bsp.c", line:99, status:"used", signature:"uint32_t TIM4_Get_Value(void)", description:"Lit la valeur du compteur TIM4", callees:[]},
+
+  {name:"Fuse_Programming", module:"app_fuseprogramming", file:"Appli/Core/Src/app_fuseprogramming.c", line:33, status:"used", signature:"void Fuse_Programming(void)", description:"Vérifie et programme les fusibles OTP nécessaires", callees:["ErrorHandler"]},
+  {name:"ErrorHandler", module:"app_fuseprogramming", file:"Appli/Core/Src/app_fuseprogramming.c", line:89, status:"used", signature:"void ErrorHandler(void)", description:"Handler d'erreur local au module fuse", callees:[]},
+
+  {name:"HAL_MspInit", module:"stm32n6xx_hal_msp", file:"Appli/Core/Src/stm32n6xx_hal_msp.c", line:63, status:"used", signature:"void HAL_MspInit(void)", description:"Init MSP HAL globale", callees:[]},
+  {name:"HAL_UART_MspInit", module:"stm32n6xx_hal_msp", file:"Appli/Core/Src/stm32n6xx_hal_msp.c", line:91, status:"used", signature:"void HAL_UART_MspInit(UART_HandleTypeDef *huart)", description:"Init MSP UART (USART1 console)", callees:[]},
+  {name:"HAL_UART_MspDeInit", module:"stm32n6xx_hal_msp", file:"Appli/Core/Src/stm32n6xx_hal_msp.c", line:139, status:"used", signature:"void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)", description:"Désinit MSP UART", callees:[]},
+
+  {name:"NMI_Handler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:70, status:"used", signature:"void NMI_Handler(void)", description:"Handler d'interruption non masquable", callees:[]},
+  {name:"HardFault_Handler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:77, status:"used", signature:"void HardFault_Handler(void)", description:"Handler de Hard Fault", callees:[]},
+  {name:"MemManage_Handler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:92, status:"used", signature:"void MemManage_Handler(void)", description:"Handler de fault mémoire", callees:[]},
+  {name:"BusFault_Handler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:107, status:"used", signature:"void BusFault_Handler(void)", description:"Handler de Bus Fault", callees:[]},
+  {name:"SecureFault_Handler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:122, status:"used", signature:"void SecureFault_Handler(void)", description:"Handler de Secure Fault (TrustZone)", callees:[]},
+  {name:"DebugMon_Handler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:137, status:"used", signature:"void DebugMon_Handler(void)", description:"Handler du moniteur de débogage", callees:[]},
+  {name:"SysTick_Handler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:152, status:"used", signature:"void SysTick_Handler(void)", description:"Handler du SysTick (1 ms)", callees:[]},
+  {name:"CSI_IRQHandler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:171, status:"used", signature:"void CSI_IRQHandler(void)", description:"Handler de l'IRQ Camera Serial Interface", callees:[]},
+  {name:"DCMIPP_IRQHandler", module:"stm32n6xx_it", file:"Appli/Core/Src/stm32n6xx_it.c", line:176, status:"used", signature:"void DCMIPP_IRQHandler(void)", description:"Handler de l'IRQ DCMIPP", callees:[]},
+
+  {name:"UTIL_LCDEx_PrintfAtLine", module:"stm32_lcd_ex", file:"Appli/Core/Src/stm32_lcd_ex.c", line:28, status:"used", signature:"void UTIL_LCDEx_PrintfAtLine(uint16_t line, const char *fmt, ...)", description:"Imprime du texte formaté sur une ligne LCD", callees:[]},
+  {name:"UTIL_LCDEx_PrintfAt", module:"stm32_lcd_ex", file:"Appli/Core/Src/stm32_lcd_ex.c", line:38, status:"used", signature:"void UTIL_LCDEx_PrintfAt(uint32_t x, uint32_t y, Text_AlignModeTypdef mode, const char *fmt, ...)", description:"Imprime du texte formaté à une position avec alignement", callees:[]},
+
+  {name:"Run_Inference", module:"utils", file:"Appli/Core/Src/utils.c", line:21, status:"used", signature:"void Run_Inference(NN_Instance_TypeDef *inst)", description:"Wrapper d'exécution du réseau via le runtime ATON", callees:[]},
+
+  {name:"initialise_monitor_handles", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:44, status:"used", signature:"void initialise_monitor_handles(void)", description:"Stub d'init du moniteur newlib", callees:[]},
+  {name:"_getpid", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:48, status:"used", signature:"int _getpid(void)", description:"Stub newlib — retourne 1", callees:[]},
+  {name:"_kill", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:53, status:"used", signature:"int _kill(int pid, int sig)", description:"Stub newlib — retourne erreur", callees:[]},
+  {name:"_exit", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:61, status:"used", signature:"void _exit(int status)", description:"Stub newlib — boucle infinie", callees:["_kill"]},
+  {name:"_read", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:67, status:"used", signature:"int _read(int file, char *ptr, int len)", description:"Stub newlib — lecture caractère", callees:[]},
+  {name:"_write", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:80, status:"used", signature:"int _write(int file, char *ptr, int len)", description:"Stub newlib — écriture caractère", callees:[]},
+  {name:"_close", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:92, status:"used", signature:"int _close(int file)", description:"Stub newlib — close", callees:[]},
+  {name:"_fstat", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:99, status:"used", signature:"int _fstat(int file, struct stat *st)", description:"Stub newlib — fstat", callees:[]},
+  {name:"_isatty", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:106, status:"used", signature:"int _isatty(int file)", description:"Stub newlib — toujours TTY", callees:[]},
+  {name:"_lseek", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:112, status:"used", signature:"int _lseek(int file, int ptr, int dir)", description:"Stub newlib — lseek", callees:[]},
+  {name:"_open", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:120, status:"used", signature:"int _open(char *path, int flags, ...)", description:"Stub newlib — open échoue", callees:[]},
+  {name:"_wait", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:128, status:"used", signature:"int _wait(int *status)", description:"Stub newlib — wait", callees:[]},
+  {name:"_unlink", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:135, status:"used", signature:"int _unlink(char *name)", description:"Stub newlib — ENOENT", callees:[]},
+  {name:"_times", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:142, status:"used", signature:"int _times(struct tms *buf)", description:"Stub newlib — times", callees:[]},
+  {name:"_stat", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:148, status:"used", signature:"int _stat(char *file, struct stat *st)", description:"Stub newlib — stat", callees:[]},
+  {name:"_link", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:155, status:"used", signature:"int _link(char *old, char *neu)", description:"Stub newlib — link", callees:[]},
+  {name:"_fork", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:163, status:"used", signature:"int _fork(void)", description:"Stub newlib — EAGAIN", callees:[]},
+  {name:"_execve", module:"syscalls", file:"Appli/Core/Src/syscalls.c", line:169, status:"used", signature:"int _execve(char *name, char **argv, char **env)", description:"Stub newlib — ENOMEM", callees:[]},
+
+  {name:"_sbrk", module:"sysmem", file:"Appli/Core/Src/sysmem.c", line:53, status:"used", signature:"void* _sbrk(ptrdiff_t incr)", description:"Allocateur heap pour newlib malloc()", callees:[]}
+];
+
+/* =========================================================
+   PARAMÈTRES GLOBAUX du projet — exposés dans la modale
+   ========================================================= */
+const PROJECT_PARAMS = {
+  "CAMERA_FPS":        { value:"20",                                   file:"Appli/Core/Inc/app_cam.h",     description:"Cadence d'acquisition caméra (FPS)" },
+  "CAMERA_FLIP":       { value:"CMW_MIRRORFLIP_MIRROR",                 file:"Appli/Core/Inc/app_config.h",  description:"Orientation du capteur (mirror)" },
+  "LCD_BG_WIDTH":      { value:"800",                                   file:"Appli/Core/Inc/app_config.h",  description:"Largeur de l'écran en pixels" },
+  "LCD_BG_HEIGHT":     { value:"480",                                   file:"Appli/Core/Inc/app_config.h",  description:"Hauteur de l'écran en pixels" },
+  "DISPLAY_DELAY":     { value:"1",                                     file:"Appli/Core/Inc/app_config.h",  description:"Délai d'affichage en frames" },
+  "NN_WIDTH":          { value:"480",                                   file:"Appli/Core/Inc/app_config.h",  description:"Largeur d'entrée du réseau de neurones" },
+  "NN_HEIGHT":         { value:"480",                                   file:"Appli/Core/Inc/app_config.h",  description:"Hauteur d'entrée du réseau de neurones" },
+  "NN_BPP":            { value:"3",                                     file:"Appli/Core/Inc/app_config.h",  description:"Bytes per pixel en entrée NN (RGB888)" },
+  "NN_FORMAT":         { value:"RGB888_YUV444_1",                       file:"Appli/Core/Inc/app_config.h",  description:"Format de pixel en entrée NN" },
+  "NB_CLASSES":        { value:"2",                                     file:"Appli/Core/Inc/app_config.h",  description:"Nombre de classes (person, not_person)" },
+  "AI_OD_ST_YOLOX_PP_IOU_THRESHOLD":  { value:"0.5", file:"Appli/Core/Inc/app_config.h", description:"Seuil IoU de la NMS YOLO-X" },
+  "AI_OD_ST_YOLOX_PP_CONF_THRESHOLD": { value:"0.6", file:"Appli/Core/Inc/app_config.h", description:"Seuil de confiance YOLO-X" },
+  "AI_OD_ST_YOLOX_PP_MAX_BOXES_LIMIT":{ value:"10",  file:"Appli/Core/Inc/app_config.h", description:"Nombre max de détections après NMS" },
+  "TRACKER_MODULE":    { value:"defined",                               file:"Build flag",                    description:"Active le module de tracking" },
+  "CNF_MAX_TSKID":     { value:"32",                                    file:"mtk3_bsp2/config/config.h",     description:"Nombre max de tâches RTOS" },
+  "CNF_MAX_SEMID":     { value:"16",                                    file:"mtk3_bsp2/config/config.h",     description:"Nombre max de sémaphores RTOS" },
+  "CNF_MAX_MTXID":     { value:"8",                                     file:"mtk3_bsp2/config/config.h",     description:"Nombre max de mutex RTOS" },
+  "CNF_TIMER_PERIOD":  { value:"1 ms",                                  file:"mtk3_bsp2/config/config.h",     description:"Période du tick noyau" },
+  "UTKERNEL_STACK_SIZE":{value:"2048",                                  file:"app.c",                          description:"Demi-taille de la pile par tâche (×2 = 4096 octets)" },
+  "track_thresh":      { value:"0.25",                                  file:"app.c",                          description:"Seuil minimum d'association tracker" },
+  "det_thresh":        { value:"0.8",                                   file:"app.c",                          description:"Seuil de détection forte tracker" },
+  "tlost_cnt":         { value:"30",                                    file:"app.c",                          description:"Nombre de frames sans détection avant perte ID" }
+};
+
+/* =========================================================
+   COMPILATION DES INDEX (callers, modules, edges)
+   ========================================================= */
+const FN_INDEX = {};
+FUNCTIONS.forEach(f => {
+  f.callers = [];
+  f.out = (f.callees || []).length;
+  FN_INDEX[f.name] = f;
+});
+let totalEdges = 0;
+FUNCTIONS.forEach(f => {
+  (f.callees || []).forEach(callee => {
+    if (FN_INDEX[callee]) {
+      FN_INDEX[callee].callers.push(f.name);
+      totalEdges++;
+    }
+  });
+});
+FUNCTIONS.forEach(f => { f.inp = f.callers.length; });
+
+/* Modules agrégés */
+const MOD_AGG = {};
+FUNCTIONS.forEach(f => {
+  if (!MOD_AGG[f.module]) {
+    MOD_AGG[f.module] = { name:f.module, count:0, out:0, inp:0, ...MODULES_META[f.module] };
+  }
+  MOD_AGG[f.module].count++;
+  MOD_AGG[f.module].out += f.out;
+  MOD_AGG[f.module].inp += f.inp;
+});
+
+/* =========================================================
+   ÉTAT & UTILITAIRES
+   ========================================================= */
+let sortCol = 'name';
+let sortDir = 'asc';
+let currentPage = 1;
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function catTag(c){return `<span class="tag tag-cat-${c}">${c}</span>`;}
+function statusTag(s){return `<span class="tag tag-st-${s}">${s.replace('_',' ')}</span>`;}
+
+/* =========================================================
+   COLORATION SYNTAXIQUE C (légère)
+   ========================================================= */
+const C_KEYWORDS = new Set([
+  'auto','break','case','const','continue','default','do','else','enum','extern','for',
+  'goto','if','inline','register','restrict','return','signed','sizeof','static','struct',
+  'switch','typedef','union','unsigned','volatile','while','_Bool','_Complex','_Imaginary'
+]);
+const C_TYPES = new Set([
+  'void','int','char','short','long','float','double','size_t','ptrdiff_t','intptr_t',
+  'uint8_t','uint16_t','uint32_t','uint64_t','int8_t','int16_t','int32_t','int64_t',
+  'uintptr_t','bool','float32_t','HAL_StatusTypeDef','UART_HandleTypeDef','DCMIPP_HandleTypeDef',
+  'CACHEAXI_HandleTypeDef','UB','INT','UW','TM_SIZE','LL_Buffer_InfoTypeDef','NN_Instance_TypeDef',
+  'CMW_Manual_roi_area_t','od_pp_outBuffer_t','od_pp_out_t','tbox_info','trk_dbox_t','trk_tbox_t',
+  'cpuload_info_t','bqueue_t','display_info_t','Text_AlignModeTypdef'
+]);
+
+function highlightC(code){
+  // Echappement HTML d'abord
+  let s = esc(code);
+  // Extraction des commentaires multi-lignes
+  const commentBlocks = [];
+  s = s.replace(/\/\*[\s\S]*?\*\//g, m => {
+    commentBlocks.push(m);
+    return ' ZZCOM' + (commentBlocks.length-1) + 'ZZ ';
+  });
+  // Extraction des commentaires single-line
+  s = s.replace(/\/\/[^\n]*/g, m => {
+    commentBlocks.push(m);
+    return ' ZZCOM' + (commentBlocks.length-1) + 'ZZ ';
+  });
+  // Extraction des strings (deja en &quot;)
+  const stringBlocks = [];
+  s = s.replace(/&quot;(?:[^\n&]|&(?!quot;))*?&quot;/g, m => {
+    stringBlocks.push(m);
+    return ' ZZSTR' + (stringBlocks.length-1) + 'ZZ ';
+  });
+  // Preprocesseur en debut de ligne
+  s = s.replace(/^(\s*#[a-zA-Z]+[^\n]*)/gm, '<span class="pre">$1</span>');
+  // Mots-cles et types
+  s = s.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (m, w) => {
+    if (C_KEYWORDS.has(w)) return '<span class="kw">' + w + '</span>';
+    if (C_TYPES.has(w))    return '<span class="typ">' + w + '</span>';
+    return m;
+  });
+  // Nombres
+  s = s.replace(/\b(0x[0-9a-fA-F]+|\d+\.?\d*[fFuUlL]?)\b/g, '<span class="num">$1</span>');
+  // Reinjection des strings et commentaires
+  s = s.replace(/ ZZSTR(\d+)ZZ /g, (m, i) => '<span class="str">' + stringBlocks[parseInt(i,10)] + '</span>');
+  s = s.replace(/ ZZCOM(\d+)ZZ /g, (m, i) => '<span class="com">' + commentBlocks[parseInt(i,10)] + '</span>');
+  return s;
+}
+
+function renderCodeBlock(f){
+  const code = (window.FUNCTION_CODES && window.FUNCTION_CODES[f.name]) || null;
+  if (!code) {
+    return `<div class="code-wrap"><div class="code-empty">Code source non disponible pour cette fonction.</div></div>`;
+  }
+  const lines = code.split('\n');
+  const startLine = f.line || 1;
+  const lineNumbers = lines.map((_, i) => startLine + i).join('\n');
+  const highlighted = highlightC(code);
+  const fileLabel = `${f.file}:${startLine}`;
+  return `<div class="code-wrap">
+    <div class="code-head">
+      <span class="code-path">${esc(fileLabel)}</span>
+      <div class="code-actions">
+        <button class="code-copy-btn" data-fn="${esc(f.name)}" onclick="copyCode(this, '${esc(f.name)}')">📋 Copier</button>
+      </div>
+    </div>
+    <div class="code-body">
+      <div class="code-lines"><pre>${lineNumbers}</pre></div>
+      <div class="code-content"><pre><code>${highlighted}</code></pre></div>
+    </div>
+  </div>`;
+}
+
+function copyCode(btn, fnName){
+  const code = (window.FUNCTION_CODES && window.FUNCTION_CODES[fnName]) || '';
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copié';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+  }).catch(() => {
+    /* Fallback : sélectionner manuellement */
+    const ta = document.createElement('textarea');
+    ta.value = code; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  });
+}
+
+/* =========================================================
+   MÉTRIQUES
+   ========================================================= */
+function renderMetrics(){
+  const used = FUNCTIONS.filter(f => f.status === 'used' || f.status === 'entry_point').length;
+  const dead = FUNCTIONS.filter(f => f.status === 'dead_code').length;
+  const ep   = FUNCTIONS.filter(f => f.status === 'entry_point').length;
+  document.getElementById('mt-total').textContent = FUNCTIONS.length;
+  document.getElementById('mt-edges').textContent = totalEdges;
+  document.getElementById('mt-mods').textContent  = Object.keys(MOD_AGG).length;
+  document.getElementById('mt-ep').textContent    = ep;
+  document.getElementById('mt-used').textContent  = used;
+  document.getElementById('mt-dead').textContent  = dead;
+}
+
+/* =========================================================
+   VUE PAR MODULES (cards groupées par catégorie)
+   ========================================================= */
+function renderModulesView(){
+  const root = document.getElementById('modules-view');
+  const byCat = {};
+  Object.values(MOD_AGG).forEach(m => {
+    const cat = m.category || 'util';
+    (byCat[cat] = byCat[cat] || []).push(m);
+  });
+  const maxCount = Math.max(...Object.values(MOD_AGG).map(m => m.count));
+  let html = '';
+  Object.keys(CATEGORIES).forEach(catId => {
+    if (!byCat[catId]) return;
+    const cat = CATEGORIES[catId];
+    html += `<div class="cat-section" data-cat="${catId}">
+      <div class="cat-header cat-${catId}" onclick="toggleCat('${catId}')">
+        <span class="cat-icon">${cat.icon}</span>
+        <div class="cat-title-block">
+          <div class="cat-name">${cat.label}</div>
+          <div class="cat-desc">${cat.description}</div>
+        </div>
+        <span class="cat-count">${byCat[catId].length} fichier${byCat[catId].length>1?'s':''}</span>
+        <span class="cat-toggle">▼</span>
+      </div>
+      <div class="module-grid">`;
+    byCat[catId].forEach(m => {
+      const w = Math.max(8, Math.round((m.count / maxCount) * 100));
+      html += `<div class="mod-card" onclick="openModModal('${m.name}')">
+        <div class="mod-card-header">
+          <div class="mod-card-name">${m.name}.c</div>
+          ${catTag(catId)}
+        </div>
+        <div style="font-size:0.78rem; color:#5a6a7a; min-height:34px;">${esc(m.description||'')}</div>
+        <div class="mod-bar-wrap"><div class="mod-bar" style="width:${w}%"></div></div>
+        <div class="mod-stats">
+          <span><strong>${m.count}</strong> fn</span>
+          <span>→ <strong>${m.out}</strong></span>
+          <span>← <strong>${m.inp}</strong></span>
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+  root.innerHTML = html;
+}
+
+function toggleCat(catId){
+  const sec = document.querySelector(`.cat-section[data-cat="${catId}"]`);
+  if (sec) sec.classList.toggle('collapsed');
+}
+
+/* =========================================================
+   FILTRES + TABLEAU + PAGINATION
+   ========================================================= */
+function populateFilters(){
+  const cats = [...new Set(FUNCTIONS.map(f => MODULES_META[f.module]?.category || 'util'))].sort();
+  const mods = [...new Set(FUNCTIONS.map(f => f.module))].sort();
+  const sts  = [...new Set(FUNCTIONS.map(f => f.status))].sort();
+  const fc = document.getElementById('filter-cat');
+  cats.forEach(c => fc.innerHTML += `<option value="${c}">${c}</option>`);
+  const fm = document.getElementById('filter-mod');
+  mods.forEach(m => fm.innerHTML += `<option value="${m}">${m}</option>`);
+  const fs = document.getElementById('filter-status');
+  sts.forEach(s => fs.innerHTML += `<option value="${s}">${s}</option>`);
+}
+
+function getFiltered(){
+  const q   = (document.getElementById('search-input').value||'').toLowerCase().trim();
+  const cat = document.getElementById('filter-cat').value;
+  const mod = document.getElementById('filter-mod').value;
+  const st  = document.getElementById('filter-status').value;
+  let list = FUNCTIONS.filter(f => {
+    const fcat = MODULES_META[f.module]?.category || 'util';
+    if (cat && fcat !== cat) return false;
+    if (mod && f.module !== mod) return false;
+    if (st  && f.status !== st) return false;
+    if (q) {
+      const blob = (f.name + ' ' + f.module + ' ' + f.file + ' ' + (f.description||'')).toLowerCase();
+      if (!blob.includes(q)) return false;
+    }
+    return true;
+  });
+  list.sort((a,b) => {
+    const va = (sortCol === 'category' ? (MODULES_META[a.module]?.category||'') : a[sortCol]);
+    const vb = (sortCol === 'category' ? (MODULES_META[b.module]?.category||'') : b[sortCol]);
+    let cmp;
+    if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+    else cmp = String(va).localeCompare(String(vb));
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+  return list;
+}
+
+function render(){
+  const list = getFiltered();
+  const ps = parseInt(document.getElementById('page-size').value, 10) || 50;
+  const totalPages = Math.max(1, Math.ceil(list.length / ps));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const slice = list.slice((currentPage-1)*ps, currentPage*ps);
+  document.getElementById('result-count').textContent = `${list.length} résultat${list.length>1?'s':''}`;
+  const tbody = document.getElementById('fn-tbody');
+  if (!slice.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="no-results">Aucune fonction ne correspond aux filtres.</td></tr>`;
+  } else {
+    tbody.innerHTML = slice.map(f => {
+      const cat = MODULES_META[f.module]?.category || 'util';
+      return `<tr data-fn="${esc(f.name)}">
+        <td class="td-name">${esc(f.name)}()</td>
+        <td class="td-file">${esc(f.module)}.c</td>
+        <td>${catTag(cat)}</td>
+        <td>${statusTag(f.status)}</td>
+        <td class="td-num" style="color:#4f46e5">${f.out}</td>
+        <td class="td-num" style="color:#16a34a">${f.inp}</td>
+        <td class="td-num" style="color:#7a8fa3">${f.line}</td>
+        <td class="td-desc" title="${esc(f.description||'')}">${esc(f.description||'')}</td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('tr').forEach(tr => {
+      tr.addEventListener('click', () => openFnModal(tr.dataset.fn));
+    });
+  }
+  renderPagination(totalPages);
+  updateSortHeaders();
+}
+
+function renderPagination(totalPages){
+  const pag = document.getElementById('pagination');
+  if (totalPages <= 1) { pag.innerHTML = ''; return; }
+  let html = `<button class="page-btn" ${currentPage===1?'disabled':''} onclick="gotoPage(${currentPage-1})">‹</button>`;
+  const around = 2;
+  for (let p=1; p<=totalPages; p++){
+    if (p===1 || p===totalPages || Math.abs(p - currentPage) <= around){
+      html += `<button class="page-btn ${p===currentPage?'active':''}" onclick="gotoPage(${p})">${p}</button>`;
+    } else if (Math.abs(p - currentPage) === around+1){
+      html += `<span style="color:#94a3b8">…</span>`;
+    }
+  }
+  html += `<button class="page-btn" ${currentPage===totalPages?'disabled':''} onclick="gotoPage(${currentPage+1})">›</button>`;
+  pag.innerHTML = html;
+}
+
+function gotoPage(p){ currentPage = p; render(); }
+
+function updateSortHeaders(){
+  document.querySelectorAll('.fn-wrap thead th').forEach(th => {
+    th.classList.remove('sorted-asc','sorted-desc');
+    if (th.dataset.col === sortCol) th.classList.add(sortDir==='asc' ? 'sorted-asc' : 'sorted-desc');
+  });
+}
+
+document.querySelectorAll('.fn-wrap thead th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortDir = (sortDir === 'asc' ? 'desc' : 'asc');
+    else { sortCol = col; sortDir = 'asc'; }
+    render();
+  });
+});
+
+['search-input','filter-cat','filter-mod','filter-status','page-size'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { currentPage = 1; render(); });
+  el.addEventListener('change', () => { currentPage = 1; render(); });
+});
+
+/* =========================================================
+   MODALES
+   ========================================================= */
+function openFnModal(name){
+  const f = FN_INDEX[name];
+  if (!f) return;
+  const cat = MODULES_META[f.module]?.category || 'util';
+  document.getElementById('fn-modal-title').textContent = f.name + '()';
+  document.getElementById('fn-modal-meta').innerHTML =
+    catTag(cat) + statusTag(f.status) +
+    `<span class="tag" style="background:#f0f4f8;border:1px solid #d4dce6;color:#475569;">${esc(f.module)}.c</span>`;
+
+  /* Recherche de paramètres globaux liés (heuristique sur le nom de fonction et le module) */
+  const relatedParams = Object.entries(PROJECT_PARAMS).filter(([k,v]) => {
+    if (f.module === 'app' && (k.startsWith('AI_OD') || k === 'NB_CLASSES' || k.startsWith('NN_') || k.startsWith('LCD_') || k === 'TRACKER_MODULE' || k === 'track_thresh' || k === 'det_thresh' || k === 'tlost_cnt' || k === 'UTKERNEL_STACK_SIZE')) return true;
+    if (f.module === 'app_cam' && (k === 'CAMERA_FPS' || k === 'CAMERA_FLIP' || k.startsWith('NN_') || k.startsWith('LCD_'))) return true;
+    if (f.module === 'mtkernel_bsp' && k.startsWith('CNF_')) return true;
+    return false;
+  });
+
+  let body = '';
+  body += `<div class="modal-section"><h4>Signature</h4><div class="signature">${esc(f.signature)}</div></div>`;
+  body += `<div class="modal-section"><h4>Description</h4><p>${esc(f.description||'—')}</p></div>`;
+  body += `<div class="modal-section"><h4>Localisation</h4><span class="file-line">${esc(f.file)}:${f.line}</span></div>`;
+  body += `<div class="modal-section"><div class="stat-pair">
+    <div class="stat-box out"><div class="v">${f.out}</div><div class="l">Sorties</div></div>
+    <div class="stat-box inp"><div class="v">${f.inp}</div><div class="l">Entrées</div></div>
+  </div></div>`;
+
+  /* === CODE SOURCE complet de la fonction === */
+  body += `<div class="modal-section"><h4>Code source</h4>${renderCodeBlock(f)}</div>`;
+
+  body += `<div class="modal-section"><h4>Fonctions appelées (${f.out})</h4>`;
+  if (f.out === 0) body += `<span class="ref-empty">Aucun appel interne au projet.</span>`;
+  else {
+    body += `<div class="ref-list">` + (f.callees||[]).map(c => `<span class="ref-item" onclick="openFnModal('${esc(c)}')">${esc(c)}()</span>`).join('') + `</div>`;
+  }
+  body += `</div>`;
+
+  body += `<div class="modal-section"><h4>Appelée par (${f.inp})</h4>`;
+  if (f.inp === 0) body += `<span class="ref-empty">${f.status==='entry_point' ? 'Point d&rsquo;entrée — appelée depuis le RTOS ou le runtime.' : 'Aucun appelant interne.'}</span>`;
+  else {
+    body += `<div class="ref-list">` + f.callers.map(c => `<span class="ref-item" onclick="openFnModal('${esc(c)}')">${esc(c)}()</span>`).join('') + `</div>`;
+  }
+  body += `</div>`;
+
+  if (relatedParams.length){
+    body += `<div class="modal-section"><h4>Paramètres globaux concernés</h4>`;
+    body += `<div style="display:grid;gap:6px">`;
+    relatedParams.forEach(([k,v]) => {
+      body += `<div style="background:#f8fafc;border:1px solid #e0e6ed;border-radius:8px;padding:8px 12px;font-size:0.82rem">
+        <code style="background:none;border:none;padding:0;color:#4f46e5;font-weight:700">${esc(k)}</code>
+        <span style="color:#7a8fa3">=</span>
+        <span style="color:#16a34a;font-family:'Cascadia Mono',monospace">${esc(v.value)}</span>
+        <div style="font-size:0.74rem;color:#7a8fa3;margin-top:2px">${esc(v.description)} — <em>${esc(v.file)}</em></div>
+      </div>`;
+    });
+    body += `</div></div>`;
+  }
+
+  document.getElementById('fn-modal-body').innerHTML = body;
+  document.getElementById('fn-modal-overlay').classList.add('open');
+}
+
+function openModModal(modName){
+  const m = MOD_AGG[modName];
+  if (!m) return;
+  document.getElementById('mod-modal-title').textContent = m.name + '.c';
+  document.getElementById('mod-modal-meta').innerHTML =
+    catTag(m.category) + `<span class="tag" style="background:#f0f4f8;border:1px solid #d4dce6;color:#475569;">${m.count} fonction${m.count>1?'s':''}</span>`;
+
+  const fns = FUNCTIONS.filter(f => f.module === modName).sort((a,b) => a.line - b.line);
+  let body = '';
+  body += `<div class="modal-section"><h4>Description</h4><p>${esc(m.description||'')}</p></div>`;
+  body += `<div class="modal-section"><h4>Fichier</h4><span class="file-line">Appli/Core/Src/${esc(m.name)}.c</span></div>`;
+  body += `<div class="modal-section"><div class="stat-pair">
+    <div class="stat-box out"><div class="v">${m.out}</div><div class="l">Appels sortants</div></div>
+    <div class="stat-box inp"><div class="v">${m.inp}</div><div class="l">Appels entrants</div></div>
+  </div></div>`;
+
+  body += `<div class="modal-section"><h4>Fonctions du module (${m.count})</h4>`;
+  body += `<div class="ref-list" style="flex-direction:column;align-items:stretch">`;
+  fns.forEach(f => {
+    body += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border:1px solid #e0e6ed;border-radius:7px;margin-bottom:4px;cursor:pointer;background:#fafbfd"
+                 onclick="closeModModal();openFnModal('${esc(f.name)}')">
+      <span style="font-family:'Cascadia Mono',monospace;font-size:0.82rem;color:#1e40af">${esc(f.name)}()</span>
+      <span style="font-size:0.74rem;color:#7a8fa3">L${f.line} · → ${f.out} · ← ${f.inp} · ${f.status}</span>
+    </div>`;
+  });
+  body += `</div></div>`;
+
+  document.getElementById('mod-modal-body').innerHTML = body;
+  document.getElementById('mod-modal-overlay').classList.add('open');
+}
+
+function closeFnModal(){ document.getElementById('fn-modal-overlay').classList.remove('open'); }
+function closeModModal(){ document.getElementById('mod-modal-overlay').classList.remove('open'); }
+
+document.getElementById('fn-modal-close').onclick = closeFnModal;
+document.getElementById('mod-modal-close').onclick = closeModModal;
+document.getElementById('fn-modal-overlay').addEventListener('click', e => { if (e.target.id === 'fn-modal-overlay') closeFnModal(); });
+document.getElementById('mod-modal-overlay').addEventListener('click', e => { if (e.target.id === 'mod-modal-overlay') closeModModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeFnModal(); closeModModal(); }});
+
+/* =========================================================
+   INIT
+   ========================================================= */
+renderMetrics();
+renderModulesView();
+populateFilters();
+render();
+</script>
+
+</body>
+</html>

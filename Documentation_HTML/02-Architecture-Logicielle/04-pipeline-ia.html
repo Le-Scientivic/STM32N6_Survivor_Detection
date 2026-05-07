@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>04 — Pipeline IA — Architecture Logicielle</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="01-vue-ensemble.html">01 — Vue d'ensemble</a></li>
+    <li><a href="02-modules.html">02 — Modules</a></li>
+    <li><a href="03-rtos-mtkernel.html">03 — RTOS μT-Kernel</a></li>
+    <li><a href="04-pipeline-ia.html" class="active">04 — Pipeline IA</a></li>
+    <li><a href="05-protocole-serie.html">05 — Protocole série</a></li>
+    <li><a href="06-build-deploiement.html">06 — Build &amp; déploiement</a></li>
+    <li><a href="mapping-fonctions.html">🔧 Mapping fonctions</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>Architecture Logicielle</div>
+</nav>
+
+<div class="page-title">
+  <h1>04 — Pipeline d'inférence</h1>
+  <p>Trajet d'une frame du capteur caméra à l'affichage des survivants détectés</p>
+</div>
+
+<div class="container">
+
+  <div class="callout">
+    <strong>🎬 Vue synthétique</strong>
+    <p>Une frame est acquise par le capteur, dérivée en deux flux par le DCMIPP, traitée par le NPU, post-traitée par le CPU, puis projetée sur l'écran avec les boîtes englobantes superposées. Toute cette chaîne tourne à <strong>20–30 FPS</strong> grâce au parallélisme entre les 4 tâches du pipeline.</p>
+  </div>
+
+  <h2>4.1 Schéma du flux de données</h2>
+  <pre><code>Capteur MIPI CSI-2 (IMX335 / VD55G1 / VD66GY)
+          │
+          ▼
+    DCMIPP — Dual Pipe
+   ┌───────┴───────┐
+   ▼               ▼
+┌──────────┐  ┌─────────────────┐
+│  Pipe1   │  │  Pipe2          │
+│ 800×480  │  │ 480×480 RGB888  │
+│ RGB565   │  │ (NN input)      │
+└────┬─────┘  └────────┬────────┘
+     │                 │ free → ready (sémaphores)
+     │                 ▼
+     │           ┌──────────────┐
+     │           │  nn_thread   │  LL_ATON_RT_Run_Inference (NPU)
+     │           └────────┬─────┘
+     │                    │ free → ready
+     │                    ▼
+     │           ┌──────────────┐
+     │           │  pp_thread   │  app_postprocess_run() + tracker
+     │           └────────┬─────┘
+     │                    │ disp.lock + disp.update
+     │                    ▼
+     │           ┌──────────────┐
+     └──────────►│  dp_thread   │  ScreenL : LAYER_0 (caméra) + LAYER_1 (boîtes)
+                 └────────┬─────┘
+                          ▼
+                       LCD 800×480</code></pre>
+
+  <h2>4.2 Étape 1 — Acquisition caméra</h2>
+  <p>Le capteur produit en continu des frames qui sont injectées dans le DCMIPP. La fonction <code>CAM_Init()</code> (<code>app_cam.c</code>) configure les deux pipes à partir des macros de <code>app_config.h</code> :</p>
+
+  <pre><code>// Pipe1 — Affichage 800×480 RGB565 16 bpp
+DCMIPP_PipeInitDisplay(LCD_BG_WIDTH, LCD_BG_HEIGHT);
+
+// Pipe2 — Réseau 480×480 RGB888_YUV444_1 3 bpp
+DCMIPP_PipeInitNn(NN_WIDTH, NN_HEIGHT, NN_FORMAT);</code></pre>
+
+  <p>L'événement <strong>VSYNC</strong> du DCMIPP (callback <code>app_main_pipe_vsync_event()</code>) signale le sémaphore <code>isp_sem</code>, ce qui réveille la tâche <code>isp_thread</code>. Celle-ci appelle <code>CAM_IspUpdate()</code> pour recalculer en continu les paramètres ISP (balance des blancs, exposition, gamma).</p>
+
+  <h2>4.3 Étape 2 — Capture du buffer d'entrée NN</h2>
+  <p>Lorsque le DCMIPP a écrit une frame complète dans le Pipe2, le callback <code>app_ancillary_pipe_frame_event()</code> est invoqué. Il transfère le buffer de la zone <code>free</code> vers la zone <code>ready</code> de la file <code>nn_input_queue</code> :</p>
+
+  <pre><code>// Schéma : 2 buffers circulant entre l'ISR et la tâche NN
+nn_input_queue {
+    void *buffers[2];          // 480×480×3 = 691 200 octets chacun
+    sem_id  free, ready;       // 2 sémaphores de synchronisation
+}</code></pre>
+
+  <p>Cette structure de <em>buffer queue</em> garantit zéro copie mémoire : le NPU lit directement le buffer rempli par le DCMIPP.</p>
+
+  <h2>4.4 Étape 3 — Inférence sur le NPU</h2>
+  <p>La tâche <code>nn_thread</code> s'éveille dès qu'un buffer est <code>ready</code>, puis exécute les appels NeuralART suivants :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Étape</th><th>API NeuralART</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>LL_ATON_RT_RuntimeInit()</code></td><td>Initialisation du runtime (au boot)</td></tr>
+        <tr><td>2</td><td><code>LL_ATON_RT_Init_Network(&amp;NN_Instance_Default)</code></td><td>Charge la topologie YOLO-X</td></tr>
+        <tr><td>3</td><td><code>LL_ATON_Set_User_Input_Buffer()</code></td><td>Pointe le buffer DCMIPP comme entrée</td></tr>
+        <tr><td>4</td><td><code>LL_ATON_RT_RunInference_*()</code></td><td>Lance l'exécution sur le NPU</td></tr>
+        <tr><td>5</td><td><code>LL_ATON_Get_User_Output_Buffer()</code></td><td>Récupère le tenseur de sortie</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Les structures de réseau (<code>NN_Instance_Default</code>) sont déclarées par la macro <code>LL_ATON_DECLARE_NAMED_NN_INSTANCE_AND_INTERFACE(Default)</code> et générées par l'outil de quantification ST. Le tenseur de sortie brut est ensuite poussé dans <code>nn_output_queue.ready</code>.</p>
+
+  <h2>4.5 Étape 4 — Post-traitement</h2>
+  <p>La tâche <code>pp_thread</code> consomme le buffer de sortie et applique le wrapper de post-processing approprié :</p>
+
+  <pre><code>app_postprocess_init();      // une seule fois au boot
+app_postprocess_run(nn_out, &amp;pp_out);   // par frame</code></pre>
+
+  <p>Selon la macro de compilation choisie dans <code>postprocess_conf.h</code>, le wrapper appelle :</p>
+  <ul>
+    <li><strong>POSTPROCESS_OD_ST_YOLOX_UF</strong> sur la cible STM32N6570-DK ;</li>
+    <li><strong>POSTPROCESS_OD_YOLO_V2_UF</strong> sur les cibles secondaires.</li>
+  </ul>
+
+  <p>Le post-processing produit une structure <code>od_pp_out_t</code> contenant le nombre de détections (<code>nb_detect</code>) et un tableau de boîtes englobantes <code>pOutBuff[]</code>. Les seuils suivants filtrent les résultats :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Macro</th><th>Valeur</th><th>Effet</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>AI_OD_ST_YOLOX_PP_CONF_THRESHOLD</code></td><td>0.6</td><td>Seuil de confiance minimum</td></tr>
+        <tr><td><code>AI_OD_ST_YOLOX_PP_IOU_THRESHOLD</code></td><td>0.5</td><td>Seuil d'IoU pour la NMS</td></tr>
+        <tr><td><code>AI_OD_ST_YOLOX_PP_MAX_BOXES_LIMIT</code></td><td>10</td><td>Nombre max de boîtes après NMS</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>4.6 Étape 5 — Tracking (optionnel)</h2>
+  <p>Si la macro <code>TRACKER_MODULE</code> est définie à la compilation, le post-processing est suivi d'un appel au tracker :</p>
+
+  <pre><code>#ifdef TRACKER_MODULE
+trk_update(&amp;trk_ctx, &amp;pp_out);   // attribution d'un ID persistant
+#endif</code></pre>
+
+  <p>Le tracker maintient un identifiant stable par survivant à travers les frames, à l'aide d'un filtre de Kalman et de seuils :</p>
+  <ul>
+    <li><code>track_thresh = 0.25</code> — seuil d'association</li>
+    <li><code>det_thresh   = 0.8</code></li>
+    <li><code>sim1_thresh  = 0.8</code> · <code>sim2_thresh = 0.5</code></li>
+    <li><code>tlost_cnt    = 30</code> — nombre de frames sans détection avant perte de l'ID</li>
+  </ul>
+
+  <h2>4.7 Étape 6 — Synchronisation et affichage</h2>
+  <p>Une fois les détections finalisées, <code>pp_thread</code> écrit le résultat dans la structure partagée <code>disp.info</code>, sous la protection du mutex <code>disp.lock</code>, puis signale le sémaphore <code>disp.update</code>.</p>
+
+  <p>La tâche <code>dp_thread</code> est alors réveillée. Elle effectue trois opérations :</p>
+  <ol>
+    <li>Lecture protégée de <code>disp.info</code> (mutex <code>disp.lock</code>).</li>
+    <li>Mise à jour du buffer de dessin (<code>dp_update_drawing_area</code>) avec les rectangles colorés via <code>UTIL_LCD_*</code> et <code>UTIL_LCDEx_PrintfAt</code> (FPS, charge CPU).</li>
+    <li>Bascule de buffer (<code>dp_commit_drawing_area</code>) — clean cache + swap pointeur.</li>
+  </ol>
+
+  <h2>4.8 Mesure de performance</h2>
+  <p>Chaque tâche horodate son entrée et sa sortie. Les valeurs sont accumulées dans la structure <code>disp.info</code> :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Champ</th><th>Mesure</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>inf_ms</code></td><td>Durée d'inférence NPU</td></tr>
+        <tr><td><code>pp_ms</code></td><td>Durée du post-processing + tracker</td></tr>
+        <tr><td><code>disp_ms</code></td><td>Durée du rendu LCD</td></tr>
+        <tr><td><code>nn_period_ms</code></td><td>Période entre deux inférences (= 1/FPS)</td></tr>
+        <tr><td>Charge CPU</td><td>Moyenne sur 8 ticks (<code>cpuload_info_t</code> dans <code>utils.c</code>)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Ces valeurs sont à la fois affichées sur l'écran et émises sur la console série au format JSON (cf. page suivante).</p>
+
+  <div class="callout success">
+    <strong>➡️ Étape suivante</strong>
+    <p>La page <a href="05-protocole-serie.html"><strong>05 — Protocole série</strong></a> détaille le format JSON des messages émis sur USART1 pour intégration externe.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Architecture Logicielle — 04/06
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>01 — Vue d'ensemble — Architecture Logicielle</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="01-vue-ensemble.html" class="active">01 — Vue d'ensemble</a></li>
+    <li><a href="02-modules.html">02 — Modules</a></li>
+    <li><a href="03-rtos-mtkernel.html">03 — RTOS μT-Kernel</a></li>
+    <li><a href="04-pipeline-ia.html">04 — Pipeline IA</a></li>
+    <li><a href="05-protocole-serie.html">05 — Protocole série</a></li>
+    <li><a href="06-build-deploiement.html">06 — Build &amp; déploiement</a></li>
+    <li><a href="mapping-fonctions.html">🔧 Mapping fonctions</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>Architecture Logicielle</div>
+</nav>
+
+<div class="page-title">
+  <h1>01 — Vue d'ensemble &amp; Environnement</h1>
+  <p>Plateforme logicielle, séquence de boot, organisation du code et environnement de développement</p>
+</div>
+
+<div class="container">
+
+  <div class="callout">
+    <strong>🎯 Mission du firmware</strong>
+    <p>Le projet <strong>STM32N6 Survivor Detection</strong> est un firmware embarqué temps-réel qui détecte la présence de personnes (survivants) dans le flux d'une caméra MIPI CSI-2, en exploitant l'unité NPU intégrée à la puce STM32N657 pour exécuter un réseau de neurones YOLO-X Nano à 25–30 images par seconde, avec affichage live des boîtes englobantes sur l'écran LCD intégré.</p>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat blue"><div class="val">μT-Kernel 3.0</div><div class="lbl">RTOS BSP2</div></div>
+    <div class="stat green"><div class="val">5</div><div class="lbl">Tâches concurrentes</div></div>
+    <div class="stat purple"><div class="val">YOLO-X Nano</div><div class="lbl">Modèle d'inférence</div></div>
+    <div class="stat orange"><div class="val">~700 KB</div><div class="lbl">Taille du code</div></div>
+    <div class="stat cyan"><div class="val">~4 MB</div><div class="lbl">Buffers runtime</div></div>
+  </div>
+
+  <h2>1.1 Plateforme logicielle</h2>
+  <p>Le firmware est construit autour de quatre couches superposées :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Couche</th><th>Composant</th><th>Rôle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Application</td><td><code>Appli/Core/</code></td><td>Pipeline métier de détection (acquisition, inférence, post-traitement, affichage)</td></tr>
+        <tr><td>RTOS</td><td>μT-Kernel 3.0 BSP2 (T-License 2.2)</td><td>Multitâche préemptif, sémaphores, mutex, files de buffers</td></tr>
+        <tr><td>Middlewares</td><td>CMW Camera · NeuralART AI Runtime · Tracker · ScreenL · YOLO post-processing</td><td>Abstraction des périphériques et services techniques</td></tr>
+        <tr><td>HAL / BSP</td><td>STM32N6xx HAL Driver · BSP STM32N6570-DK</td><td>Accès aux périphériques (DCMIPP, LTDC, XSPI, USART, NPU…)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>1.2 Séquence de boot en deux temps</h2>
+  <p>Conformément à l'architecture sécurisée du STM32N6, le démarrage se déroule en deux phases :</p>
+
+  <pre><code>Power-On
+   │
+   ▼
+┌─────────────────────────────────────────┐
+│  FSBL (First Stage Boot Loader)         │
+│  Exécution dans AXISRAM2                │
+│  → Init horloges, sécurité, RIF/IAC     │
+│  → Chargement de l'application en XSPI  │
+│  → Saut vers main()                     │
+└─────────────────────┬───────────────────┘
+                      ▼
+┌─────────────────────────────────────────┐
+│  Application STM32N6_MTK_Person_*       │
+│  Exécution depuis XSPI RAM (XIP)        │
+│  → main() : init HAL, NPU, μT-Kernel    │
+│  → usermain() : entry RTOS              │
+│  → main_thread_fct() : init bus + app   │
+│  → app_run() : pipeline détection       │
+└─────────────────────────────────────────┘</code></pre>
+
+  <h2>1.3 Points d'entrée du firmware</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Fonction</th><th>Fichier</th><th>Rôle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>main()</code></td><td><code>Appli/Core/Src/main.c</code></td><td>Initialisation HAL, caches, horloges, NPU, sécurité ; lance le kernel</td></tr>
+        <tr><td><code>usermain()</code></td><td><code>main.c</code></td><td>Entrée utilisateur du μT-Kernel : crée la tâche principale</td></tr>
+        <tr><td><code>main_thread_fct()</code></td><td><code>main.c</code></td><td>Initialise les bus XSPI, configure les priorités NVIC, appelle <code>app_run()</code></td></tr>
+        <tr><td><code>app_run()</code></td><td><code>Appli/Core/Src/app.c</code></td><td>Crée les 4 tâches du pipeline, initialise écran et caméra, boucle infinie</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>1.4 Organisation du dépôt</h2>
+  <pre><code>STM32N6_Survivor_Detection/
+├── Appli/                    # Application principale
+│   ├── Core/
+│   │   ├── Src/             # main.c, app.c, app_cam.c, mtkernel_bsp.c, utils.c…
+│   │   └── Inc/             # app_config.h, serial_protocol.h, postprocess_conf.h…
+│   ├── mtk3_bsp2/           # μT-Kernel 3.0 BSP2 (kernel + sysdepend STM32Cube)
+│   └── STM32N657X0HXQ_LRUN.ld   # Linker script (XSPI RAM)
+├── Lib/                      # Middlewares (AI Runtime, Camera, Tracker, ScreenL…)
+├── Model/                    # Modèle YOLO-X et code généré NeuralART
+├── STM32Cube_FW_N6/          # HAL + BSP STM32N6
+├── Binaries/                 # Sorties signées (FSBL, modèle, application)
+├── Secure_nsclib/            # Bibliothèque non-secure callable (TrustZone)
+└── Middlewares/              # Composants additionnels (USB, RTOS legacy)</code></pre>
+
+  <h2>1.5 Configuration centrale</h2>
+  <p>Toutes les valeurs runtime importantes sont concentrées dans un seul fichier d'en-tête : <code>Appli/Core/Inc/app_config.h</code>. Modifier les seuils de détection ou la résolution caméra ne nécessite donc <strong>aucun changement de code applicatif</strong>.</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Domaine</th><th>Macro</th><th>Valeur (DK)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Caméra</td><td><code>CAMERA_FLIP</code></td><td><code>CMW_MIRRORFLIP_MIRROR</code></td></tr>
+        <tr><td>Affichage</td><td><code>LCD_BG_WIDTH × HEIGHT</code></td><td>800 × 480</td></tr>
+        <tr><td>Affichage</td><td><code>DISPLAY_DELAY</code></td><td>1 frame</td></tr>
+        <tr><td>Réseau</td><td><code>NN_WIDTH × HEIGHT</code></td><td>480 × 480</td></tr>
+        <tr><td>Réseau</td><td><code>NN_FORMAT</code></td><td><code>RGB888_YUV444_1</code></td></tr>
+        <tr><td>Réseau</td><td><code>NN_BPP</code></td><td>3</td></tr>
+        <tr><td>Détection</td><td><code>NB_CLASSES</code></td><td>2 (person · not_person)</td></tr>
+        <tr><td>Post-proc</td><td><code>AI_OD_ST_YOLOX_PP_IOU_THRESHOLD</code></td><td>0.5</td></tr>
+        <tr><td>Post-proc</td><td><code>AI_OD_ST_YOLOX_PP_CONF_THRESHOLD</code></td><td>0.6</td></tr>
+        <tr><td>Post-proc</td><td><code>AI_OD_ST_YOLOX_PP_MAX_BOXES_LIMIT</code></td><td>10</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>1.6 Environnement de développement</h2>
+  <ul>
+    <li><strong>IDE</strong> : STM32CubeIDE 1.19.0 ou supérieur (toolchain ARM GCC inclus)</li>
+    <li><strong>Programmateur</strong> : STM32CubeProgrammer 2.20.0 ou supérieur</li>
+    <li><strong>Cible matérielle</strong> : STM32N6570-DK Discovery Kit avec ST-LINK on-board</li>
+    <li><strong>Configuration matérielle</strong> : fichier <code>STM32N6_MTK_Person_Detection.ioc</code> (STM32CubeMX)</li>
+    <li><strong>Génération du modèle</strong> : <code>Model/STM32N6570-DK/generate-n6-model.sh</code></li>
+  </ul>
+
+  <div class="callout success">
+    <strong>➡️ Étape suivante</strong>
+    <p>La page <a href="02-modules.html"><strong>02 — Modules</strong></a> détaille fichier par fichier le rôle de chaque source applicatif, et la page <a href="03-rtos-mtkernel.html"><strong>03 — RTOS μT-Kernel</strong></a> présente la mécanique multitâche.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Architecture Logicielle — 01/06
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grafcet STM32N6 — Détection de survivants</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Variables (light)
+   ============================================================ */
+:root{
+  --bg-app:#f5f7fa; --bg-panel:#ffffff; --bg-elev:#f8fafc; --bg-card:#ffffff;
+  --bg-hover:#f0f6ff; --bg-num-initial:#e0e6ed; --bg-num-has-sub:#dcfce7;
+  --bg-has-sub:#f0fdf4; --bg-has-sub-hover:#dcfce7; --bg-active:#fef3c7;
+  --border:#e0e6ed; --border-strong:#cbd5e1; --border-muted:#f0f3f6;
+  --text:#2c3e50; --text-muted:#5a7a93; --text-dim:#7a8fa3; --text-faint:#94a3b8;
+  --accent:#2563eb; --accent-2:#1e40af; --accent-soft:rgba(37,99,235,0.1);
+  --success:#166534; --success-hover:#15803d; --success-text:#ffffff;
+  --success-green:#22c55e; --success-cond:#15803d; --success-sig:#166534;
+  --warning:#d97706; --warning-strong:#92400e; --warning-soft:#fed7aa;
+  --danger:#dc2626; --danger-text:#991b1b; --danger-soft:#fee2e2;
+  --purple:#7c3aed; --purple-text:#581c87; --purple-soft:#ede9fe; --purple-2:#7c3aed;
+  --resizer-hover:#2563eb;
+  --shadow:0 4px 16px rgba(44,62,80,0.06);
+  color-scheme:light;
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Poppins','Segoe UI',Arial,sans-serif; background:var(--bg-app); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; line-height:1.5; }
+
+/* ============================================================
+   Header (nav globale + breadcrumb)
+   ============================================================ */
+#header { background:linear-gradient(135deg,#fff 0%,var(--bg-elev) 100%); border-bottom:1px solid var(--border); padding:0 18px; display:flex; align-items:center; gap:14px; flex-shrink:0; min-height:64px; box-shadow:0 1px 0 rgba(0,0,0,0.05); }
+#header h1 { font-size:15px; font-weight:700; color:var(--text); white-space:nowrap; }
+#header h1 span.brand-dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:linear-gradient(135deg,#2563eb,#7c3aed); margin-right:7px; vertical-align:middle; }
+.nav-back { display:inline-flex; align-items:center; gap:6px; color:var(--text-muted); text-decoration:none; font-size:13px; font-weight:600; transition:color 0.2s; padding:6px 10px; border-radius:6px; }
+.nav-back:hover { color:var(--accent); background:var(--bg-elev); }
+
+#breadcrumb { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); flex:1; overflow:hidden; min-width:0; }
+.bread-item { cursor:pointer; color:var(--accent-2); white-space:nowrap; padding:3px 8px; border-radius:5px; transition:background 0.12s; }
+.bread-item:hover { background:var(--accent-soft); color:var(--accent); }
+.bread-sep { color:var(--text-faint); font-weight:300; flex-shrink:0; }
+.bread-current { color:var(--text); white-space:nowrap; font-weight:700; padding:3px 8px; flex-shrink:0; }
+
+/* ============================================================
+   Layout 3 panneaux
+   ============================================================ */
+#body { display:flex; flex:1; overflow:hidden; min-height:0; }
+
+#sidebar { width:260px; background:var(--bg-panel); border-right:1px solid var(--border); overflow-y:auto; flex-shrink:0; padding:14px 0; }
+.sg-group { margin-bottom:8px; }
+.sg-group-header { padding:9px 14px 7px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-faint); display:flex; align-items:center; gap:8px; }
+.sg-group-header::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--group-color); box-shadow:0 0 0 2px color-mix(in srgb,var(--group-color) 30%,transparent); flex-shrink:0; }
+.sg-item { display:flex; align-items:stretch; padding:0 12px 0 0; cursor:pointer; font-size:12px; color:var(--text); border-left:3px solid transparent; transition:background 0.18s, color 0.18s; position:relative; min-height:34px; }
+.sg-item .sg-row { display:flex; align-items:center; gap:8px; flex:1; padding:7px 0 7px 12px; min-width:0; transition:transform 0.18s; }
+.sg-item:hover { background:var(--bg-elev); }
+.sg-item:hover .sg-row { transform:translateX(2px); }
+.sg-item.active { background:var(--accent-soft); color:var(--text); border-left-color:var(--group-color); }
+.sg-item.active::before { content:''; position:absolute; left:-3px; top:50%; width:3px; height:60%; transform:translateY(-50%); background:var(--group-color); border-radius:0 2px 2px 0; }
+.sg-item.sg-parent { font-weight:700; background:linear-gradient(90deg, color-mix(in srgb,var(--group-color) 10%,transparent) 0%, transparent 70%); }
+.sg-item-id { font-weight:800; font-family:'Cascadia Mono','Consolas',monospace; font-size:10px; flex-shrink:0; color:var(--group-color); }
+.sg-item-title { flex:1; font-size:11px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sg-item.sg-parent .sg-item-title { font-size:13px; font-weight:700; }
+.tg-marker { display:inline-flex; align-items:center; flex-shrink:0; font-family:'Cascadia Mono','Consolas',monospace; font-weight:700; font-size:14px; color:var(--group-color); line-height:1; opacity:0.7; margin-right:2px; }
+.sg-item:hover .tg-marker, .sg-item.active .tg-marker { opacity:1; }
+
+/* ============================================================
+   Zone centrale (rendu grafcet)
+   ============================================================ */
+#grafcet-container { flex:1; overflow-y:auto; overflow-x:auto; padding:24px 32px; display:flex; flex-direction:column; align-items:flex-start; min-width:0; }
+.grafcet-title-area { margin-bottom:20px; width:100%; max-width:680px; }
+.gt-row { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.gt-id { font-size:26px; font-weight:800; color:var(--group-color); font-family:'Cascadia Mono','Consolas',monospace; }
+.gt-title { font-size:17px; font-weight:700; color:var(--text); }
+.gt-subtitle { font-size:12px; color:var(--text-dim); font-family:'Cascadia Mono','Consolas',monospace; margin-top:4px; }
+.gt-note { margin-top:10px; padding:8px 14px; background:var(--bg-elev); border-left:3px solid var(--accent); font-size:12px; color:var(--text-muted); border-radius:0 6px 6px 0; line-height:1.5; }
+
+/* Steps */
+.grafcet-col { display:flex; flex-direction:column; align-items:flex-start; min-width:240px; width:100%; max-width:680px; }
+.step-row { display:flex; align-items:flex-start; gap:16px; width:100%; }
+.step-left { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+.step-rect { width:230px; min-height:60px; border:1.5px solid var(--border-strong); border-radius:12px; display:flex; align-items:stretch; padding:0; background:var(--bg-card); cursor:pointer; transition:all 0.2s; overflow:hidden; box-shadow:var(--shadow); }
+.step-rect:hover { border-color:var(--accent); background:var(--bg-hover); }
+.step-rect.initial { border-style:double; border-width:5px; border-color:var(--border-strong); }
+.step-rect.has-sub { border-left:8px solid var(--success-green); background:var(--bg-has-sub); }
+.step-rect.has-sub:hover { border-color:var(--success-green); background:var(--bg-has-sub-hover); }
+.step-rect.has-return { border-color:var(--accent); background:var(--accent-soft); }
+.step-rect.active { border-color:var(--warning-strong) !important; background:var(--bg-active) !important; }
+.step-num-block { width:38px; background:rgba(0,0,0,0.04); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:var(--text-faint); flex-shrink:0; border-right:1.5px solid var(--border-muted); font-family:'Cascadia Mono',monospace; }
+.step-rect.initial .step-num-block { background:var(--bg-num-initial); }
+.step-rect.has-sub .step-num-block { background:var(--bg-num-has-sub); color:var(--success-cond); }
+.step-rect.has-return .step-num-block { background:var(--accent-soft); color:var(--accent); }
+.step-content { flex:1; padding:8px 12px; display:flex; flex-direction:column; justify-content:center; }
+.step-label { font-size:12px; font-weight:700; color:var(--text); line-height:1.35; }
+.step-cond { font-size:10px; color:var(--success-cond); margin-top:4px; font-style:italic; }
+.step-sub-row { display:flex; align-items:center; gap:5px; margin-top:5px; flex-wrap:wrap; }
+.sub-badge { font-size:9px; background:var(--success); color:#fff; padding:2px 7px; border-radius:8px; font-weight:700; }
+.return-badge { font-size:9px; background:var(--accent); color:#fff; padding:2px 7px; border-radius:8px; font-weight:700; }
+.sub-hint { font-size:9px; color:var(--success-dim); font-style:italic; }
+
+.actions-col { padding-top:8px; flex:1; max-width:380px; }
+.action-item { font-size:11px; color:var(--text-muted); padding:3px 0 3px 9px; border-left:2px solid var(--border-strong); margin-bottom:3px; line-height:1.4; }
+.action-item.signal { border-left-color:var(--success); color:var(--success-sig); font-family:'Cascadia Mono',monospace; }
+
+/* Connectors */
+.connector { width:2px; background:var(--border-strong); flex-shrink:0; }
+.conn-stub { width:2px; height:18px; background:var(--border-strong); flex-shrink:0; }
+
+/* Transitions */
+.trans-wrapper { display:flex; align-items:flex-start; gap:16px; width:100%; min-height:46px; }
+.trans-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:230px; }
+.trans-line { width:2px; height:10px; background:var(--border-strong); }
+.trans-bar { width:100px; height:4px; background:var(--text-muted); border-radius:2px; }
+.trans-bar.loop-trans { background:var(--border-strong); width:60px; }
+.trans-bar.exit-trans { background:var(--warning); width:80px; }
+.trans-cond { font-size:10px; color:var(--text-muted); margin-top:5px; text-align:center; max-width:220px; line-height:1.35; padding:2px 8px; background:#fff; border-radius:4px; }
+
+/* Loop / back arrows */
+.loop-arrow-row { display:flex; align-items:flex-end; margin-top:0; max-width:500px; padding-left:230px; }
+.loop-corner { width:12px; height:30px; flex-shrink:0; border-right:2px solid var(--accent); border-bottom:2px solid var(--accent); border-bottom-right-radius:8px; }
+.loop-arrowhead { color:var(--accent); font-size:13px; flex-shrink:0; line-height:1; margin-left:-1px; }
+.loop-label { margin-left:8px; padding:5px 10px; background:var(--accent-soft); border:1px solid var(--accent); border-radius:5px; font-size:10px; color:var(--accent-2); cursor:pointer; line-height:1.4; }
+.loop-label strong { display:block; margin-bottom:1px; }
+.loop-label:hover { filter:brightness(0.95); }
+
+/* Parallel branches (= = =) */
+.parallel-bar { width:100%; max-width:680px; height:4px; border-top:3px double #0891b2; margin:10px 0; position:relative; }
+.parallel-bar::before, .parallel-bar::after { content:'═'; position:absolute; color:#0891b2; font-size:1.3rem; top:-22px; }
+.parallel-bar::before { left:0; }
+.parallel-bar::after  { right:0; }
+.parallel-banner { padding:5px 12px; background:#cffafe; border:1px solid #0891b2; border-radius:4px; font-size:11px; color:#155e75; max-width:680px; margin-top:6px; font-weight:600; }
+
+/* Resizer */
+#resizer { width:5px; background:var(--border); cursor:col-resize; flex-shrink:0; transition:background 0.1s; position:relative; }
+#resizer:hover, #resizer.dragging { background:var(--resizer-hover); }
+#resizer::before { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:3px; height:40px; background:var(--border-strong); border-radius:2px; opacity:0.6; pointer-events:none; }
+body.resizing { cursor:col-resize; user-select:none; }
+body.resizing #info-panel, body.resizing #grafcet-container { pointer-events:none; }
+
+/* Info panel */
+#info-panel { width:430px; min-width:260px; background:var(--bg-panel); border-left:1px solid var(--border); padding:18px 18px 30px; overflow-y:auto; font-size:12px; flex-shrink:0; box-shadow:-4px 0 12px rgba(0,0,0,0.04); }
+#info-panel h3 { font-size:13px; font-weight:700; color:var(--accent); margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+.info-section { margin-bottom:14px; }
+.info-label { color:var(--text-faint); font-size:10px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; font-weight:700; }
+.info-value { color:var(--text); font-size:12px; line-height:1.45; }
+.info-action { display:block; padding:5px 10px; background:var(--bg-elev); border:1px solid var(--border); border-radius:5px; margin-bottom:4px; color:var(--text-muted); font-size:11px; line-height:1.4; font-family:'Cascadia Mono','Consolas',monospace; }
+.info-action.signal { background:#dcfce7; border-color:#86efac; color:var(--success-sig); }
+.sig-badges { display:flex; flex-wrap:wrap; gap:4px; }
+.sig-badge { padding:3px 8px; border-radius:10px; font-size:10px; font-weight:700; background:var(--success); color:#fff; font-family:'Cascadia Mono',monospace; }
+.code-ref { display:inline-block; padding:4px 9px; background:var(--bg-elev); border:1px solid var(--border); border-radius:5px; font-family:'Cascadia Mono',monospace; font-size:11px; color:#1e40af; margin-right:5px; }
+.open-sub-btn { display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%; margin-top:6px; padding:8px 14px; background:var(--success); border:none; border-radius:7px; color:#fff; font-size:12px; font-weight:600; cursor:pointer; text-align:left; transition:background 0.12s; font-family:inherit; }
+.open-sub-btn:hover { background:var(--success-hover); }
+.open-sub-btn.return-btn { background:var(--accent); }
+.open-sub-btn.return-btn:hover { background:var(--accent-2); }
+.trans-list { font-size:11px; color:var(--text-muted); }
+.trans-list div { padding:5px 8px; border-bottom:1px solid var(--border-muted); display:flex; gap:8px; }
+.trans-list div:last-child { border-bottom:none; }
+.trans-arrow { color:var(--text-faint); font-weight:700; flex-shrink:0; }
+.placeholder-msg { color:var(--text-faint); font-size:12px; line-height:1.7; text-align:center; margin-top:30px; padding:0 20px; }
+.placeholder-msg .legend-color { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+
+/* Legend */
+.legend-row { display:flex; flex-wrap:wrap; gap:14px; margin-top:18px; padding:12px 16px; background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; max-width:680px; }
+.leg-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-dim); }
+.leg-box { width:18px; height:11px; border-radius:3px; }
+.leg-box.b-initial { border:3px double var(--text-muted); }
+.leg-box.b-sub { border:1px solid var(--success-green); border-left:5px solid var(--success-green); background:var(--bg-has-sub); }
+.leg-box.b-active { background:var(--bg-active); border:1px solid var(--warning-strong); }
+.leg-box.b-normal { background:#fff; border:1px solid var(--border-strong); }
+
+/* Scrollbars */
+#sidebar::-webkit-scrollbar, #info-panel::-webkit-scrollbar, #grafcet-container::-webkit-scrollbar { width:8px; height:8px; }
+#sidebar::-webkit-scrollbar-thumb, #info-panel::-webkit-scrollbar-thumb, #grafcet-container::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:4px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <h1><span class="brand-dot"></span>Grafcet — STM32N6 Survivor Detection</h1>
+  <div id="breadcrumb"></div>
+</div>
+
+<div id="body">
+  <div id="sidebar"><div id="sidebar-content"></div></div>
+  <div id="grafcet-container"><div id="grafcet-inner"></div></div>
+  <div id="resizer"></div>
+  <div id="info-panel">
+    <h3>Détails de l'étape</h3>
+    <div id="info-content">
+      <div class="placeholder-msg">
+        Cliquez sur une étape pour voir ses détails.<br><br>
+        <span class="legend-color" style="background:var(--bg-has-sub);border-left:3px solid var(--success-green)"></span> Étape avec sous-grafcet<br>
+        <span class="legend-color" style="background:#fff;border:2px double var(--text-muted)"></span> Étape initiale<br>
+        <span class="legend-color" style="background:var(--bg-active);border:1px solid var(--warning-strong)"></span> Étape sélectionnée
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   DONNÉES — grafcets STM32N6 Survivor Detection
+   ============================================================ */
+const DATA = {
+  groups: [
+    { id:"boot",     label:"Démarrage & init",  color:"#06b6d4" },
+    { id:"runtime",  label:"Régime permanent",  color:"#16a34a" },
+    { id:"sub",      label:"Sous-séquences",    color:"#a855f7" }
+  ],
+
+  grafcets: {
+    "G0": {
+      id:"G0", group:"boot", title:"Application STM32N6 — vue principale",
+      subtitle:"main.c :: main() → app_run()",
+      note:"Vue d'ensemble du firmware : du Power-On au régime permanent. Cliquez sur une étape verte pour ouvrir son sous-grafcet.",
+      steps: [
+        { id:0, label:"POWER-ON", initial:true, source:"main.c", actions:["Reset matériel STM32N6","BOOT0=L · BOOT1=L"] },
+        { id:1, label:"FSBL (signé) en AXISRAM2", source:"FSBL pré-compilé", actions:["Validation signature","Init horloges baseline","Configuration RIF/IAC","Saut vers main()"] },
+        { id:2, label:"main()", sub:"G_MAIN", source:"main.c:53", actions:["HAL_Init()","Init caches","Init NPU + sécurité","knl_start_mtkernel()"] },
+        { id:3, label:"usermain()", source:"main.c:87", actions:["Création main_thread (prio 15)","Démarrage tâche principale"], signals:{ "RTOS_START":"signalé" } },
+        { id:4, label:"main_thread_fct()", sub:"G_MAIN_THREAD", source:"main.c:112", actions:["Configuration NVIC","Init bus XSPI externes","Activation low-power clocks","Appel app_run()"] },
+        { id:5, label:"app_run() — pipeline détection", sub:"G_PIPELINE", source:"app.c:1038", actions:["Init compositeur écran","Init buffer queues","Création des 4 tâches RTOS","Démarrage caméra & boucle infinie"] }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"Reset terminé" },
+        { id:"T12", from:1, to:2, cond:"Application chargée en XSPI RAM" },
+        { id:"T23", from:2, to:3, cond:"knl_start_mtkernel() retourne" },
+        { id:"T34", from:3, to:4, cond:"main_thread démarrée" },
+        { id:"T45", from:4, to:5, cond:"Bus externes initialisés" }
+      ]
+    },
+
+    "G_MAIN": {
+      id:"G_MAIN", group:"boot", title:"Initialisation système main()",
+      subtitle:"main.c :: main()",
+      parent:"G0", parent_step:2,
+      note:"Toutes les opérations bas-niveau exécutées avant le démarrage du noyau μT-Kernel.",
+      steps: [
+        { id:0, label:"HAL_Init() + caches", initial:true, source:"main.c:59", actions:["HAL_Init()","SCB_EnableICache()","SCB_EnableDCache() si USE_DCACHE"] },
+        { id:1, label:"CONSOLE_Config()", source:"main.c:163", actions:["Init USART1","115200 baud, 8N1","Broches PE5/PE6"], signals:{ "INIT_CONSOLE":"OK" } },
+        { id:2, label:"SystemClock_Config()", source:"main.c:196", actions:["PLL1 = 600 MHz CPU","PLL2 = 1 GHz","PLL3 = 900 MHz","PLL4 = 225 MHz"] },
+        { id:3, label:"NPURam_enable()", source:"main.c:294", actions:["Enable AXISRAM3-6 MEM clocks","RAMCFG init"] },
+        { id:4, label:"Fuse_Programming()", source:"app_fuseprogramming.c:33", actions:["Vérification OTP","Programmation si requis"] },
+        { id:5, label:"NPUCache_config()", source:"main.c:320", actions:["npu_cache_init()","npu_cache_enable()"] },
+        { id:6, label:"Security_Config()", source:"main.c:330", actions:["Config RIF RIMC/RISC","NPU · DMA2D · DCMIPP","LTDC · OTG"] },
+        { id:7, label:"IAC_Config()", source:"main.c:357", actions:["Init Illegal Access Controller"] },
+        { id:8, label:"knl_start_mtkernel()", source:"main.c:76", actions:["Démarrage du noyau RTOS","Branche sur usermain()"], signals:{ "RTOS":"démarré" } }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"Caches actifs" },
+        { id:"T12", from:1, to:2, cond:"Console prête" },
+        { id:"T23", from:2, to:3, cond:"Horloges stables" },
+        { id:"T34", from:3, to:4, cond:"RAM NPU activée" },
+        { id:"T45", from:4, to:5, cond:"Fusibles validés" },
+        { id:"T56", from:5, to:6, cond:"Cache NPU prêt" },
+        { id:"T67", from:6, to:7, cond:"RIF configuré" },
+        { id:"T78", from:7, to:8, cond:"IAC actif" }
+      ]
+    },
+
+    "G_MAIN_THREAD": {
+      id:"G_MAIN_THREAD", group:"boot", title:"Tâche principale — main_thread_fct()",
+      subtitle:"main.c :: main_thread_fct()",
+      parent:"G0", parent_step:4,
+      note:"S'exécute dans le contexte du RTOS. Active les bus mémoires externes avant de lancer l'application.",
+      steps: [
+        { id:0, label:"Configuration NVIC", initial:true, source:"main.c:116", actions:["Lecture priority SysTick","Group preempt configuration"] },
+        { id:1, label:"BSP_XSPI_RAM_Init()", source:"main.c:126", actions:["Init contrôleur XSPI1","Activation memory-mapped mode"] },
+        { id:2, label:"BSP_XSPI_NOR_Init()", source:"main.c:130", actions:["Init flash NOR XSPI2","Mode OPI / DTR","Memory-mapped XIP"] },
+        { id:3, label:"Enable low-power clocks", source:"main.c:137", actions:["Activation des bus de l'application"] },
+        { id:4, label:"app_run()", sub:"G_PIPELINE", source:"main.c:153", actions:["Lance la boucle applicative"] }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"NVIC configuré" },
+        { id:"T12", from:1, to:2, cond:"RAM externe accessible" },
+        { id:"T23", from:2, to:3, cond:"Flash NOR memory-mapped" },
+        { id:"T34", from:3, to:4, cond:"Bus prêts" }
+      ]
+    },
+
+    "G_PIPELINE": {
+      id:"G_PIPELINE", group:"runtime", title:"Pipeline de détection — app_run()",
+      subtitle:"app.c :: app_run()",
+      parent:"G0", parent_step:5,
+      note:"Initialisation puis lancement des 4 tâches concurrentes. Cliquez sur les étapes vertes pour ouvrir le grafcet de chaque tâche.",
+      steps: [
+        { id:0, label:"cpuload_init()", initial:true, source:"app.c:252", actions:["Init structure de mesure CPU"] },
+        { id:1, label:"Display_init()", source:"app.c:1001", actions:["SCRL_Init() — 2 layers","LAYER_0 background RGB565","LAYER_1 foreground ARGB4444"] },
+        { id:2, label:"bqueue_init() × 2", source:"app.c:287", actions:["Init nn_input_queue (2 buffers)","Init nn_output_queue (2 buffers)","Création sémaphores free/ready"] },
+        { id:3, label:"CAM_Init()", sub:"G_CAM_INIT", source:"app_cam.c:84", actions:["Init capteur via CMW","Configuration DCMIPP Pipe1 + Pipe2"] },
+        { id:4, label:"CAM_DisplayPipe_Start()", source:"app_cam.c:104", actions:["Démarrage acquisition Pipe1 continue"] },
+        { id:5, label:"Création des 4 tâches RTOS", source:"app.c:1109-1130", actions:["tk_cre_tsk(isp_thread_fct, prio=10)","tk_cre_tsk(nn_thread_fct,  prio=11)","tk_cre_tsk(pp_thread_fct,  prio=14)","tk_cre_tsk(dp_thread_fct,  prio=14)","tk_sta_tsk() pour toutes"], signals:{ "APP_INIT_COMPLETE":"signalé" } },
+        { id:6, label:"isp_thread_fct()", sub:"G_ISP", source:"app.c:986", actions:["Boucle ISP haute priorité"] },
+        { id:7, label:"nn_thread_fct()", sub:"G_NN", source:"app.c:667", actions:["Boucle d'inférence NPU"] },
+        { id:8, label:"pp_thread_fct()", sub:"G_PP", source:"app.c:829", actions:["Boucle post-processing + tracking"] },
+        { id:9, label:"dp_thread_fct()", sub:"G_DP", source:"app.c:940", actions:["Boucle de rendu LCD"] }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"Mesure CPU prête" },
+        { id:"T12", from:1, to:2, cond:"Compositeur initialisé" },
+        { id:"T23", from:2, to:3, cond:"Buffer queues prêtes" },
+        { id:"T34", from:3, to:4, cond:"Caméra initialisée" },
+        { id:"T45", from:4, to:5, cond:"Pipe1 actif" },
+        { id:"T56", from:5, to:6, cond:"Tâches créées (lancement parallèle)" },
+        { id:"T67", from:6, to:7, cond:"" },
+        { id:"T78", from:7, to:8, cond:"" },
+        { id:"T89", from:8, to:9, cond:"" }
+      ],
+      parallelStart:5
+    },
+
+    "G_CAM_INIT": {
+      id:"G_CAM_INIT", group:"sub", title:"Initialisation caméra — CAM_Init()",
+      subtitle:"app_cam.c :: CAM_Init()",
+      parent:"G_PIPELINE", parent_step:3,
+      note:"Sélection automatique du capteur (IMX335 / VD55G1 / VD66GY) puis configuration des deux pipes DCMIPP.",
+      steps: [
+        { id:0, label:"CMW_CAMERA_Init()", initial:true, source:"app_cam.c:84", actions:["Détection capteur","width=0, height=0 (auto)","fps=20, mirror=MIRROR"] },
+        { id:1, label:"DCMIPP_PipeInitDisplay()", source:"app_cam.c:44", actions:["Configuration Pipe1","800×480 RGB565 16 bpp","Crop manuel ROI"] },
+        { id:2, label:"DCMIPP_PipeInitNn()", source:"app_cam.c:65", actions:["Configuration Pipe2","480×480 RGB888_YUV444_1","3 bpp · gamma=0"] }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"Capteur prêt" },
+        { id:"T12", from:1, to:2, cond:"Pipe1 configuré" }
+      ]
+    },
+
+    "G_ISP": {
+      id:"G_ISP", group:"runtime", title:"Tâche ISP — isp_thread_fct()",
+      subtitle:"app.c :: isp_thread_fct() · prio 10 · stack 4096 o",
+      parent:"G_PIPELINE", parent_step:6,
+      note:"Tâche la plus prioritaire. Réveillée par chaque VSYNC pour mettre à jour la balance des blancs et l'exposition.",
+      steps: [
+        { id:0, label:"Attente isp_sem", initial:true, source:"app.c:986", actions:["tk_wai_sem(isp_sem, TMO_FEVR)"] },
+        { id:1, label:"CAM_IspUpdate()", source:"app_cam.c:120", actions:["Recalcul AWB / AE / Gamma"] }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"VSYNC DCMIPP → isp_sem signalé" },
+        { id:"T10", from:1, to:0, cond:"ISP terminé · retour boucle", type:"loop" }
+      ]
+    },
+
+    "G_NN": {
+      id:"G_NN", group:"runtime", title:"Tâche NN — nn_thread_fct()",
+      subtitle:"app.c :: nn_thread_fct() · prio 11 · stack 4096 o",
+      parent:"G_PIPELINE", parent_step:7,
+      note:"Exécute le réseau YOLO-X Nano sur le NPU. Latence typique 30–50 ms par inférence.",
+      steps: [
+        { id:0, label:"Attente buffer caméra prêt", initial:true, source:"app.c:721", actions:["bqueue_get_ready(nn_input_queue)"] },
+        { id:1, label:"LL_ATON_Set_User_Input_Buffer()", source:"app.c:721", actions:["Pointage du buffer DCMIPP comme entrée NN"] },
+        { id:2, label:"Run_Inference()", source:"utils.c:21", actions:["LL_ATON_RT_RunInference_*()","Exécution sur NPU"], signals:{ "INFERENCE":"running" } },
+        { id:3, label:"Récupération sortie + push", source:"app.c:730", actions:["LL_ATON_Get_User_Output_Buffer()","bqueue_put_ready(nn_output_queue)","bqueue_put_free(nn_input_queue)"] }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"Frame 480×480 dispo" },
+        { id:"T12", from:1, to:2, cond:"Input pointé" },
+        { id:"T23", from:2, to:3, cond:"Inférence terminée (~30-50 ms)" },
+        { id:"T30", from:3, to:0, cond:"Sortie publiée · retour boucle", type:"loop" }
+      ]
+    },
+
+    "G_PP": {
+      id:"G_PP", group:"runtime", title:"Tâche post-processing — pp_thread_fct()",
+      subtitle:"app.c :: pp_thread_fct() · prio 14 · stack 4096 o",
+      parent:"G_PIPELINE", parent_step:8,
+      note:"Décode la sortie YOLO, applique la NMS et met à jour le tracker. Émet le JSON DETECTION_RESULT sur USART1.",
+      steps: [
+        { id:0, label:"Attente sortie NN", initial:true, source:"app.c:865", actions:["bqueue_get_ready(nn_output_queue)"] },
+        { id:1, label:"app_postprocess_run()", source:"app.c:865", actions:["Décodage YOLO-X","NMS (IoU=0.5)","Filtre conf ≥ 0.6","Limite 10 boîtes max"] },
+        { id:2, label:"app_tracking()", source:"app.c:796", actions:["update_and_capture_tracking_enabled()","trk_update() si TRACKER_MODULE","Attribution IDs persistants"] },
+        { id:3, label:"Publication résultats", source:"app.c:872-903", actions:["tk_loc_mtx(disp.lock)","Écriture disp.info","tk_unl_mtx() · tk_sig_sem(disp.update)","SERIAL [DATA][DETECT][DETECTION_RESULT]"], signals:{ "disp.update":"signalé" } }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"Tenseur YOLO disponible" },
+        { id:"T12", from:1, to:2, cond:"Boîtes filtrées" },
+        { id:"T23", from:2, to:3, cond:"Tracker mis à jour" },
+        { id:"T30", from:3, to:0, cond:"Résultat publié · retour boucle", type:"loop" }
+      ]
+    },
+
+    "G_DP": {
+      id:"G_DP", group:"runtime", title:"Tâche affichage — dp_thread_fct()",
+      subtitle:"app.c :: dp_thread_fct() · prio 14 · stack 4096 o",
+      parent:"G_PIPELINE", parent_step:9,
+      note:"Réveillée par disp.update, dessine les boîtes et statistiques sur le layer foreground (ARGB4444) puis bascule.",
+      steps: [
+        { id:0, label:"Attente disp.update", initial:true, source:"app.c:949", actions:["tk_wai_sem(disp.update, TMO_FEVR)"] },
+        { id:1, label:"Lecture disp.info (mutex)", source:"app.c:954", actions:["tk_loc_mtx(disp.lock)","Copie disp.info → local","tk_unl_mtx()"] },
+        { id:2, label:"dp_update_drawing_area()", source:"app.c:913", actions:["Configuration buffer foreground d'écriture"] },
+        { id:3, label:"Display_NetworkOutput()", source:"app.c:659", actions:["Tracé des boîtes englobantes","UTIL_LCDEx_PrintfAt() : FPS, charge CPU","Conversion coords NN → LCD"] },
+        { id:4, label:"dp_commit_drawing_area()", source:"app.c:927", actions:["Clean cache","Bascule pointeur layer ARGB4444"], signals:{ "FRAME":"affichée" } }
+      ],
+      transitions: [
+        { id:"T01", from:0, to:1, cond:"Nouveau résultat publié" },
+        { id:"T12", from:1, to:2, cond:"Données copiées" },
+        { id:"T23", from:2, to:3, cond:"Buffer d'écriture sélectionné" },
+        { id:"T34", from:3, to:4, cond:"Rendu terminé" },
+        { id:"T40", from:4, to:0, cond:"Frame affichée · retour boucle", type:"loop" }
+      ]
+    }
+  }
+};
+
+/* ============================================================
+   ÉTAT
+   ============================================================ */
+let currentGrafcet = 'G0';
+let history = [];
+let selectedStep = null;
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function getGroup(g){ return DATA.groups.find(gr => gr.id === g.group) || DATA.groups[0]; }
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+function buildSidebar(){
+  const root = document.getElementById('sidebar-content');
+  let html = '';
+  DATA.groups.forEach(grp => {
+    const grafcetsInGroup = Object.values(DATA.grafcets).filter(g => g.group === grp.id);
+    if (!grafcetsInGroup.length) return;
+    html += `<div class="sg-group" style="--group-color:${grp.color}">
+      <div class="sg-group-header" style="--group-color:${grp.color}">${esc(grp.label)}</div>`;
+    /* On affiche d'abord les racines du groupe (sans parent), puis on descend récursivement */
+    const roots = grafcetsInGroup.filter(g => !g.parent || !DATA.grafcets[g.parent]);
+    roots.forEach(g => html += renderItem(g, 0, grp.color));
+    /* Pour les enfants dont le parent est dans un autre groupe, on les ajoute aussi à plat */
+    grafcetsInGroup.forEach(g => {
+      if (g.parent && DATA.grafcets[g.parent] && DATA.grafcets[g.parent].group !== grp.id) {
+        html += renderItem(g, 1, grp.color);
+      }
+    });
+    html += `</div>`;
+  });
+  root.innerHTML = html;
+  document.querySelectorAll('.sg-item').forEach(el => {
+    el.addEventListener('click', () => {
+      history = [];
+      navigateTo(el.dataset.gid, true);
+    });
+  });
+}
+
+function renderItem(g, depth, color){
+  const children = Object.values(DATA.grafcets).filter(c => c.parent === g.id && c.group === g.group);
+  const hasChildren = children.length > 0;
+  const marker = depth > 0 ? `<span class="tg-marker">${'  '.repeat(depth-1)}└─</span>` : '';
+  let html = `<div class="sg-item ${hasChildren?'sg-parent':''}" data-gid="${g.id}" id="sg-${g.id}" data-depth="${depth}" style="--group-color:${color}">
+    <div class="sg-row">
+      ${marker}
+      <span class="sg-item-id">${esc(g.id)}</span>
+      <span class="sg-item-title">${esc(g.title)}</span>
+    </div>
+  </div>`;
+  /* Enfants dans le même groupe */
+  children.forEach(c => html += renderItem(c, depth+1, color));
+  return html;
+}
+
+/* ============================================================
+   RENDU CENTRAL
+   ============================================================ */
+function render(gid){
+  if (!DATA.grafcets[gid]) return;
+  currentGrafcet = gid;
+  selectedStep = null;
+  const g = DATA.grafcets[gid];
+  const grp = getGroup(g);
+  const root = document.getElementById('grafcet-inner');
+  root.style.setProperty('--group-color', grp.color);
+
+  let html = `<div class="grafcet-title-area" style="--group-color:${grp.color}">
+    <div class="gt-row">
+      <span class="gt-id">${esc(g.id)}</span>
+      <span class="gt-title">${esc(g.title)}</span>
+    </div>
+    <div class="gt-subtitle">${esc(g.subtitle||'')}</div>`;
+  if (g.note) html += `<div class="gt-note">ⓘ ${esc(g.note)}</div>`;
+  html += `</div>`;
+
+  if (g.parallelStart != null) {
+    html += `<div class="parallel-banner">‖ Tâches RTOS concurrentes — exécution parallèle après l'étape ${g.parallelStart}</div>`;
+  }
+
+  html += `<div class="grafcet-col">`;
+  for (let i = 0; i < g.steps.length; i++) {
+    const step = g.steps[i];
+    html += renderStep(g, step, i === 0);
+    /* Transition vers l'étape suivante (sauf après la dernière) */
+    if (i < g.steps.length - 1) {
+      const nextStep = g.steps[i+1];
+      const trans = (g.transitions||[]).find(t => t.from === step.id && t.to === nextStep.id);
+      /* Bascule en parallèle */
+      if (g.parallelStart != null && step.id === g.parallelStart) {
+        html += `<div class="parallel-bar"></div>`;
+      } else if (g.parallelStart != null && step.id > g.parallelStart) {
+        /* Branches parallèles : pas de transition séquentielle */
+        html += `<div style="height:14px"></div>`;
+      } else {
+        html += renderTransition(trans);
+      }
+    }
+  }
+  html += `</div>`;
+
+  /* Loop arrows pour les transitions de type 'loop' */
+  (g.transitions||[]).filter(t => t.type === 'loop').forEach(t => {
+    html += `<div class="loop-arrow-row">
+      <div class="loop-corner"></div>
+      <span class="loop-arrowhead">◄</span>
+      <span class="loop-label" onclick="selectStep('${gid}', ${t.to})">
+        <strong>⟲ ${esc(t.id||'loop')}</strong>
+        <span style="opacity:0.7">${esc(t.cond||'')}</span> → étape ${t.to}
+      </span>
+    </div>`;
+  });
+
+  /* Légende */
+  html += `<div class="legend-row">
+    <div class="leg-item"><span class="leg-box b-initial"></span> Initiale</div>
+    <div class="leg-item"><span class="leg-box b-normal"></span> Standard</div>
+    <div class="leg-item"><span class="leg-box b-sub"></span> A un sous-grafcet</div>
+    <div class="leg-item"><span class="leg-box b-active"></span> Sélectionnée</div>
+  </div>`;
+
+  root.innerHTML = html;
+
+  /* Branchement des événements sur les rectangles */
+  document.querySelectorAll('.step-rect').forEach(rect => {
+    rect.addEventListener('click', () => {
+      const sgid = rect.dataset.gid;
+      const sid  = parseInt(rect.dataset.sid, 10);
+      selectStep(sgid, sid);
+    });
+    rect.addEventListener('dblclick', () => {
+      const sub = rect.dataset.sub;
+      if (sub && DATA.grafcets[sub]) navigateTo(sub);
+    });
+  });
+
+  updateBreadcrumb();
+  updateSidebarActive();
+  clearInfo();
+}
+
+function renderStep(g, step, isFirst){
+  const cls = ['step-rect'];
+  if (step.initial) cls.push('initial');
+  if (step.sub) cls.push('has-sub');
+  const subAttr = step.sub ? `data-sub="${esc(step.sub)}"` : '';
+  let html = `<div class="step-row">
+    <div class="step-left">
+      ${!isFirst ? '<div class="conn-stub"></div>' : ''}
+      <div class="${cls.join(' ')}" data-gid="${g.id}" data-sid="${step.id}" ${subAttr}>
+        <div class="step-num-block">${step.id}</div>
+        <div class="step-content">
+          <div class="step-label">${esc(step.label)}</div>`;
+  if (step.cond_label) html += `<div class="step-cond">${esc(step.cond_label)}</div>`;
+  if (step.sub) html += `<div class="step-sub-row"><span class="sub-badge">→ ${esc(step.sub)}</span><span class="sub-hint">double-clic pour ouvrir</span></div>`;
+  html += `      </div>
+      </div>
+    </div>
+    <div class="actions-col">`;
+  (step.actions || []).slice(0, 4).forEach(a => {
+    html += `<div class="action-item">${esc(a)}</div>`;
+  });
+  if (step.signals) {
+    Object.entries(step.signals).forEach(([k,v]) => {
+      html += `<div class="action-item signal">${esc(k)} = ${esc(v)}</div>`;
+    });
+  }
+  html += `  </div>
+  </div>`;
+  return html;
+}
+
+function renderTransition(trans){
+  if (!trans) {
+    return `<div class="trans-wrapper"><div class="trans-col"><div class="trans-line"></div><div class="trans-bar"></div><div class="trans-line"></div></div></div>`;
+  }
+  return `<div class="trans-wrapper">
+    <div class="trans-col">
+      <div class="trans-line"></div>
+      <div class="trans-bar"></div>
+      ${trans.cond ? `<div class="trans-cond">${esc(trans.cond)}</div>` : ''}
+      <div class="trans-line"></div>
+    </div>
+    <div style="padding-top:14px;font-size:9px;color:var(--text-faint);font-style:italic">${esc(trans.id||'')}</div>
+  </div>`;
+}
+
+/* ============================================================
+   PANNEAU INFO
+   ============================================================ */
+function selectStep(gid, sid){
+  const g = DATA.grafcets[gid];
+  if (!g) return;
+  const step = g.steps.find(s => s.id === sid);
+  if (!step) return;
+  selectedStep = sid;
+
+  /* Marqueur visuel sur l'étape sélectionnée */
+  document.querySelectorAll('.step-rect.active').forEach(r => r.classList.remove('active'));
+  const rect = document.querySelector(`.step-rect[data-gid="${gid}"][data-sid="${sid}"]`);
+  if (rect) rect.classList.add('active');
+
+  let html = `<div class="info-section">
+    <div class="info-label">Identifiant</div>
+    <div class="info-value"><span class="code-ref">${esc(g.id)} · étape ${sid}</span></div>
+  </div>`;
+  html += `<div class="info-section">
+    <div class="info-label">Description</div>
+    <div class="info-value" style="font-weight:700;font-size:14px">${esc(step.label)}</div>
+  </div>`;
+  if (step.source) {
+    html += `<div class="info-section">
+      <div class="info-label">Source</div>
+      <div class="info-value"><span class="code-ref">${esc(step.source)}</span></div>
+    </div>`;
+  }
+  if (step.cond_label) {
+    html += `<div class="info-section">
+      <div class="info-label">Condition d'activation</div>
+      <div class="info-value" style="color:var(--success-cond);font-style:italic">${esc(step.cond_label)}</div>
+    </div>`;
+  }
+  if (step.actions && step.actions.length) {
+    html += `<div class="info-section">
+      <div class="info-label">Actions associées</div>`;
+    step.actions.forEach(a => html += `<div class="info-action">${esc(a)}</div>`);
+    html += `</div>`;
+  }
+  if (step.signals) {
+    html += `<div class="info-section">
+      <div class="info-label">Signaux émis</div>
+      <div class="sig-badges">`;
+    Object.entries(step.signals).forEach(([k,v]) => {
+      html += `<span class="sig-badge">${esc(k)} = ${esc(v)}</span>`;
+    });
+    html += `</div></div>`;
+  }
+  if (step.sub && DATA.grafcets[step.sub]) {
+    const sub = DATA.grafcets[step.sub];
+    html += `<div class="info-section">
+      <div class="info-label">Sous-grafcet</div>
+      <button class="open-sub-btn" onclick="navigateTo('${step.sub}')">
+        <span>📂 Ouvrir ${esc(sub.id)} — ${esc(sub.title)}</span>
+        <span>›</span>
+      </button>
+    </div>`;
+  }
+  /* Retour parent si on est dans un sous-grafcet et que c'est la dernière étape */
+  if (g.parent && DATA.grafcets[g.parent] && sid === g.steps[g.steps.length-1].id) {
+    const par = DATA.grafcets[g.parent];
+    html += `<div class="info-section">
+      <div class="info-label">Suite du programme</div>
+      <button class="open-sub-btn return-btn" onclick="navigateToStep('${g.parent}', ${g.parent_step+1 < par.steps.length ? g.parent_step+1 : g.parent_step})">
+        <span>↩ Retour ${esc(par.id)} — étape ${g.parent_step+1 < par.steps.length ? g.parent_step+1 : g.parent_step}</span>
+        <span>›</span>
+      </button>
+    </div>`;
+  }
+
+  /* Transitions */
+  const outgoing = (g.transitions||[]).filter(t => t.from === sid);
+  const incoming = (g.transitions||[]).filter(t => t.to === sid);
+  if (outgoing.length) {
+    html += `<div class="info-section">
+      <div class="info-label">Transitions sortantes (${outgoing.length})</div>
+      <div class="trans-list">`;
+    outgoing.forEach(t => {
+      html += `<div><span class="trans-arrow">→ ${t.to}</span><span style="font-style:italic">${esc(t.cond||t.id||'')}</span></div>`;
+    });
+    html += `</div></div>`;
+  }
+  if (incoming.length) {
+    html += `<div class="info-section">
+      <div class="info-label">Transitions entrantes (${incoming.length})</div>
+      <div class="trans-list">`;
+    incoming.forEach(t => {
+      html += `<div><span class="trans-arrow">${t.from} →</span><span style="font-style:italic">${esc(t.cond||t.id||'')}</span></div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  document.getElementById('info-content').innerHTML = html;
+}
+
+function clearInfo(){
+  document.getElementById('info-content').innerHTML = `<div class="placeholder-msg">
+    Cliquez sur une étape pour voir ses détails.<br><br>
+    <span class="legend-color" style="background:var(--bg-has-sub);border-left:3px solid var(--success-green)"></span> Étape avec sous-grafcet (double-clic pour ouvrir)<br>
+    <span class="legend-color" style="background:#fff;border:2px double var(--text-muted)"></span> Étape initiale<br>
+    <span class="legend-color" style="background:var(--bg-active);border:1px solid var(--warning-strong)"></span> Étape sélectionnée
+  </div>`;
+}
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+function navigateTo(gid, fromSidebar){
+  if (!DATA.grafcets[gid]) return;
+  if (!fromSidebar && currentGrafcet !== gid) history.push(currentGrafcet);
+  render(gid);
+}
+
+function navigateToStep(gid, stepId){
+  if (!DATA.grafcets[gid]) return;
+  if (currentGrafcet !== gid) history.push(currentGrafcet);
+  render(gid);
+  if (stepId != null) setTimeout(() => selectStep(gid, stepId), 0);
+}
+
+function goBack(){
+  if (history.length > 0) render(history.pop());
+}
+
+function updateBreadcrumb(){
+  const bc = document.getElementById('breadcrumb');
+  bc.innerHTML = '';
+  const chain = [...history, currentGrafcet];
+  chain.forEach((gid, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'bread-sep';
+      sep.textContent = '›';
+      bc.appendChild(sep);
+    }
+    const span = document.createElement('span');
+    if (i < chain.length - 1) {
+      span.className = 'bread-item';
+      span.textContent = gid;
+      span.addEventListener('click', () => {
+        history = chain.slice(0, i);
+        render(gid);
+      });
+    } else {
+      span.className = 'bread-current';
+      const g = DATA.grafcets[gid];
+      span.textContent = `${gid} — ${g ? g.title : ''}`;
+    }
+    bc.appendChild(span);
+  });
+}
+
+function updateSidebarActive(){
+  document.querySelectorAll('.sg-item').forEach(el => el.classList.remove('active'));
+  const active = document.getElementById('sg-' + currentGrafcet);
+  if (active) {
+    active.classList.add('active');
+    active.scrollIntoView({ block:'nearest' });
+  }
+}
+
+/* ============================================================
+   RESIZER (info panel)
+   ============================================================ */
+(function initResizer(){
+  const resizer = document.getElementById('resizer');
+  const panel = document.getElementById('info-panel');
+  const saved = localStorage.getItem('stm32n6-grafcet-panel-w');
+  if (saved) panel.style.width = saved + 'px';
+  let dragging = false;
+  resizer.addEventListener('mousedown', e => {
+    dragging = true;
+    resizer.classList.add('dragging');
+    document.body.classList.add('resizing');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const w = Math.min(700, Math.max(260, window.innerWidth - e.clientX));
+    panel.style.width = w + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove('dragging');
+    document.body.classList.remove('resizing');
+    localStorage.setItem('stm32n6-grafcet-panel-w', parseInt(panel.style.width, 10));
+  });
+})();
+
+/* ============================================================
+   RACCOURCIS CLAVIER
+   ============================================================ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') goBack();
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+buildSidebar();
+render('G0');
+</script>
+
+</body>
+</html>

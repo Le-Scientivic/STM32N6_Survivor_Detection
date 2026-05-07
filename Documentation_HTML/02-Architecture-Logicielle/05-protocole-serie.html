@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05 — Protocole série — Architecture Logicielle</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="01-vue-ensemble.html">01 — Vue d'ensemble</a></li>
+    <li><a href="02-modules.html">02 — Modules</a></li>
+    <li><a href="03-rtos-mtkernel.html">03 — RTOS μT-Kernel</a></li>
+    <li><a href="04-pipeline-ia.html">04 — Pipeline IA</a></li>
+    <li><a href="05-protocole-serie.html" class="active">05 — Protocole série</a></li>
+    <li><a href="06-build-deploiement.html">06 — Build &amp; déploiement</a></li>
+    <li><a href="mapping-fonctions.html">🔧 Mapping fonctions</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>Architecture Logicielle</div>
+</nav>
+
+<div class="page-title">
+  <h1>05 — Protocole série JSON</h1>
+  <p>Format des messages émis sur USART1 — intégration avec des systèmes externes</p>
+</div>
+
+<div class="container">
+
+  <div class="callout">
+    <strong>📡 Liaison de sortie</strong>
+    <p>Le firmware émet des événements structurés sur la console <strong>USART1 (115200 baud, 8N1)</strong>. Le format est défini dans <code>Appli/Core/Inc/serial_protocol.h</code> et est sélectionnable parmi <code>FORMAT_JSON</code> (par défaut), <code>FORMAT_DEBUG</code> ou <code>FORMAT_BOTH</code>.</p>
+  </div>
+
+  <h2>5.1 Format général d'un message</h2>
+  <pre><code>[TIMESTAMP] [LEVEL] [MODULE] [EVENT] {json_data}</code></pre>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Champ</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>TIMESTAMP</code></td><td>Millisecondes depuis le boot, sur 8 caractères, padding zéros</td></tr>
+        <tr><td><code>LEVEL</code></td><td>Niveau : <code>INFO</code> · <code>DATA</code> · <code>PERF</code> · <code>WARN</code> · <code>ERROR</code> · <code>DEBUG</code></td></tr>
+        <tr><td><code>MODULE</code></td><td>Source du message (cf. table ci-dessous)</td></tr>
+        <tr><td><code>EVENT</code></td><td>Type d'événement (cf. table ci-dessous)</td></tr>
+        <tr><td><code>json_data</code></td><td>Payload JSON spécifique à l'événement</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>5.2 Modules</h2>
+  <p>9 modules sources sont définis dans <code>serial_protocol.h</code> :</p>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Module</th><th>Émetteur typique</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>INIT</code></td><td>Phase d'initialisation système</td></tr>
+        <tr><td><code>RTOS</code></td><td>Création / démarrage des tâches μT-Kernel</td></tr>
+        <tr><td><code>CAMERA</code></td><td>Driver caméra et ISP</td></tr>
+        <tr><td><code>NN</code></td><td>Tâche d'inférence</td></tr>
+        <tr><td><code>PP</code></td><td>Post-traitement YOLO</td></tr>
+        <tr><td><code>DETECT</code></td><td>Résultats finaux de détection</td></tr>
+        <tr><td><code>TRACK</code></td><td>Suivi des objets (IDs persistants)</td></tr>
+        <tr><td><code>DISPLAY</code></td><td>Tâche d'affichage</td></tr>
+        <tr><td><code>PERF</code></td><td>Mesures de performance</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>5.3 Séquence d'événements de boot</h2>
+  <pre><code>[00000123] [INFO] [RTOS] [RTOS_START] {}
+[00000145] [INFO] [RTOS] [TASK_CREATE] {"task":"main_thread"}
+[00000167] [INFO] [RTOS] [TASK_START]  {"name":"main_thread","id":1}
+[00000201] [INFO] [INIT] [SYSTEM_START] {}
+[00000223] [INFO] [INIT] [NVIC_CONFIG]  {}
+[00000245] [INFO] [INIT] [RAM_INIT]     {}
+[00000267] [INFO] [INIT] [FLASH_INIT]   {}
+[00000289] [INFO] [INIT] [CLOCKS_CONFIG] {}
+[00000311] [INFO] [INIT] [SYSTEM_READY] {}
+[00000333] [INFO] [INIT] [APP_INIT_START] {}
+[00000355] [INFO] [CAMERA] [CAMERA_INIT] {}
+[00000377] [INFO] [RTOS] [TASK_CREATE] {"name":"nn_thread","id":2}
+[00000399] [INFO] [RTOS] [TASK_CREATE] {"name":"pp_thread","id":3}
+[00000421] [INFO] [RTOS] [TASK_CREATE] {"name":"dp_thread","id":4}
+[00000443] [INFO] [RTOS] [TASK_CREATE] {"name":"isp_thread","id":5}
+[00000465] [INFO] [INIT] [APP_INIT_COMPLETE] {}</code></pre>
+
+  <h2>5.4 Événement de détection</h2>
+  <p>À chaque frame, le module <code>DETECT</code> émet un message <code>DETECTION_RESULT</code> contenant les boîtes englobantes :</p>
+
+  <h3>Sans tracking</h3>
+  <pre><code>[00012345] [DATA] [DETECT] [DETECTION_RESULT]
+{
+  "frame": 150,
+  "count": 2,
+  "tracking": false,
+  "objects": [
+    { "class": "person", "bbox": { "x": 120, "y": 85, "w": 45, "h": 120 } },
+    { "class": "person", "bbox": { "x": 450, "y": 90, "w": 50, "h": 130 } }
+  ]
+}</code></pre>
+
+  <h3>Avec tracking activé</h3>
+  <pre><code>[00023456] [DATA] [DETECT] [DETECTION_RESULT]
+{
+  "frame": 250,
+  "count": 3,
+  "tracking": true,
+  "objects": [
+    { "id": 1, "class": "person", "bbox": { "x": 115, "y": 82, "w": 48, "h": 125 } },
+    { "id": 3, "class": "person", "bbox": { "x": 455, "y": 88, "w": 52, "h": 135 } },
+    { "id": 7, "class": "person", "bbox": { "x": 200, "y": 150, "w": 40, "h": 110 } }
+  ]
+}</code></pre>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Champ</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>frame</code></td><td>integer</td><td>Numéro de frame (compteur croissant)</td></tr>
+        <tr><td><code>count</code></td><td>integer</td><td>Nombre de survivants détectés</td></tr>
+        <tr><td><code>tracking</code></td><td>boolean</td><td>Indique si le tracker est actif</td></tr>
+        <tr><td><code>objects[].id</code></td><td>integer</td><td>ID persistant (tracking activé uniquement)</td></tr>
+        <tr><td><code>objects[].class</code></td><td>string</td><td>Classe détectée (ici <code>"person"</code>)</td></tr>
+        <tr><td><code>objects[].bbox</code></td><td>object</td><td>Boîte englobante en pixels écran : <code>{x, y, w, h}</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>5.5 Événements de performance</h2>
+  <p>Le module <code>PERF</code> publie un message <code>TIMING</code> par frame :</p>
+
+  <pre><code>[00012389] [PERF] [PERF] [TIMING]
+{
+  "frame": 150,
+  "inference_ms": 32,
+  "pp_ms": 4,
+  "display_ms": 8,
+  "period_ms": 44,
+  "fps": 22
+}</code></pre>
+
+  <p>Le module <code>DISPLAY</code> émet un <code>FRAME_START</code> à l'entrée du rendu :</p>
+
+  <pre><code>[00012345] [DATA] [DISPLAY] [FRAME_START]
+{ "frame": 150, "count": 2, "tracking": false, "buffer": 0 }</code></pre>
+
+  <h2>5.6 Avertissements</h2>
+  <p>Lorsque le post-processing détecte plus d'objets que la limite (<code>AI_OD_ST_YOLOX_PP_MAX_BOXES_LIMIT = 10</code>), le module <code>PP</code> émet :</p>
+
+  <pre><code>[00034567] [WARN] [PP] [WARNING]
+{ "msg": "detection_overflow", "detected": 15, "limit": 10 }</code></pre>
+
+  <h2>5.7 Référence rapide des événements</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Niveau</th><th>Module</th><th>Événement</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>INFO</td><td>RTOS</td><td><code>RTOS_START</code></td><td>Le noyau a démarré</td></tr>
+        <tr><td>INFO</td><td>RTOS</td><td><code>TASK_CREATE</code> · <code>TASK_START</code> · <code>TASK_READY</code></td><td>Cycle de vie d'une tâche</td></tr>
+        <tr><td>INFO</td><td>INIT</td><td><code>SYSTEM_START</code> · <code>SYSTEM_READY</code></td><td>Bornes de l'init bas niveau</td></tr>
+        <tr><td>INFO</td><td>INIT</td><td><code>NVIC_CONFIG</code> · <code>RAM_INIT</code> · <code>FLASH_INIT</code> · <code>CLOCKS_CONFIG</code></td><td>Étapes d'initialisation</td></tr>
+        <tr><td>INFO</td><td>INIT</td><td><code>APP_INIT_START</code> · <code>APP_INIT_COMPLETE</code></td><td>Init applicative</td></tr>
+        <tr><td>INFO</td><td>CAMERA</td><td><code>CAMERA_INIT</code> · <code>TASK_START</code></td><td>Caméra prête</td></tr>
+        <tr><td>INFO</td><td>NN · PP · DISPLAY</td><td><code>TASK_START</code> · <code>TASK_READY</code></td><td>Tâches du pipeline</td></tr>
+        <tr><td>DATA</td><td>DETECT</td><td><code>DETECTION_RESULT</code></td><td>Résultat de détection (boîtes)</td></tr>
+        <tr><td>DATA</td><td>DISPLAY</td><td><code>FRAME_START</code></td><td>Début du rendu</td></tr>
+        <tr><td>PERF</td><td>PERF</td><td><code>TIMING</code></td><td>Mesures par frame</td></tr>
+        <tr><td>WARN</td><td>PP</td><td><code>WARNING</code></td><td>Avertissement (overflow…)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>5.8 Exemple de parser Python</h2>
+  <pre><code>import re, json, serial
+
+def parse(line):
+    m = re.match(r'\[(\d+)\] \[(\w+)\] \[(\w+)\] \[(\w+)\] (.+)', line)
+    if not m: return None
+    ts, lvl, mod, evt, data = m.groups()
+    return { 'ts': int(ts), 'level': lvl, 'module': mod, 'event': evt,
+             'data': json.loads(data) }
+
+port = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
+while True:
+    line = port.readline().decode('utf-8').strip()
+    msg = parse(line)
+    if msg and msg['module'] == 'DETECT':
+        print(f"Frame {msg['data']['frame']} : {msg['data']['count']} survivant(s)")</code></pre>
+
+  <div class="callout success">
+    <strong>➡️ Étape suivante</strong>
+    <p>La page <a href="06-build-deploiement.html"><strong>06 — Build &amp; déploiement</strong></a> détaille la procédure de compilation et de programmation des binaires sur la carte STM32N6570-DK.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Architecture Logicielle — 05/06
+</footer>
+
+</body>
+</html>

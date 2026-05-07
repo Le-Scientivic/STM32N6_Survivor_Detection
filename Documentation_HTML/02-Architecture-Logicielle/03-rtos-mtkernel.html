@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 — RTOS μT-Kernel — Architecture Logicielle</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="01-vue-ensemble.html">01 — Vue d'ensemble</a></li>
+    <li><a href="02-modules.html">02 — Modules</a></li>
+    <li><a href="03-rtos-mtkernel.html" class="active">03 — RTOS μT-Kernel</a></li>
+    <li><a href="04-pipeline-ia.html">04 — Pipeline IA</a></li>
+    <li><a href="05-protocole-serie.html">05 — Protocole série</a></li>
+    <li><a href="06-build-deploiement.html">06 — Build &amp; déploiement</a></li>
+    <li><a href="mapping-fonctions.html">🔧 Mapping fonctions</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>Architecture Logicielle</div>
+</nav>
+
+<div class="page-title">
+  <h1>03 — RTOS μT-Kernel 3.0</h1>
+  <p>Multitâche préemptif, sémaphores, mutex et files de buffers</p>
+</div>
+
+<div class="container">
+
+  <div class="callout">
+    <strong>🧩 μT-Kernel 3.0 BSP2</strong>
+    <p>Le projet utilise le noyau temps réel <strong>μT-Kernel 3.0 BSP2</strong> sous T-License 2.2, un RTOS léger conçu pour les systèmes embarqués contraints. L'intégration STM32Cube est effectuée par <code>mtkernel_bsp.c</code>, et le code du noyau est hébergé sous <code>Appli/mtk3_bsp2/</code>.</p>
+  </div>
+
+  <h2>3.1 Configuration du noyau</h2>
+  <p>Les paramètres clés du noyau sont définis dans <code>Appli/mtk3_bsp2/config/</code> :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Paramètre</th><th>Valeur</th><th>Effet</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>CNF_MAX_TSKID</code></td><td>32</td><td>Nombre maximal de tâches simultanées</td></tr>
+        <tr><td><code>CNF_MAX_SEMID</code></td><td>16</td><td>Nombre maximal de sémaphores</td></tr>
+        <tr><td><code>CNF_MAX_MTXID</code></td><td>8</td><td>Nombre maximal de mutex</td></tr>
+        <tr><td><code>CNF_TIMER_PERIOD</code></td><td>1 ms</td><td>Période du tick noyau</td></tr>
+        <tr><td>Pile temporaire</td><td>256 octets</td><td>Pile interne des appels système</td></tr>
+        <tr><td><code>USE_IMALLOC</code></td><td>1</td><td>Allocation dynamique activée</td></tr>
+        <tr><td><code>SYSTEM_MEM_SIZE</code></td><td>10 KB</td><td>Pool mémoire système statique</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>3.2 Architecture des tâches</h2>
+  <p>L'application instancie <strong>5 tâches</strong> qui s'exécutent en parallèle. Toutes utilisent la même taille de pile (<code>2 × UTKERNEL_STACK_SIZE = 4096 octets</code>) ; les priorités sont <em>numérotées en sens inverse</em> (plus le numéro est petit, plus la priorité est haute).</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Tâche</th><th>Priorité</th><th>Pile</th><th>Rôle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>isp_thread</code></td><td><strong>10</strong> (la + haute)</td><td>4096 o</td><td>Mise à jour de l'ISP caméra (déclenchée par VSYNC)</td></tr>
+        <tr><td><code>nn_thread</code></td><td>11</td><td>4096 o</td><td>Inférence YOLO-X sur le NPU</td></tr>
+        <tr><td><code>pp_thread</code></td><td>14</td><td>4096 o</td><td>Post-traitement (NMS) et tracking</td></tr>
+        <tr><td><code>dp_thread</code></td><td>14</td><td>4096 o</td><td>Affichage : dessin des boîtes englobantes</td></tr>
+        <tr><td><code>main_thread</code></td><td>15 (la + basse)</td><td>4096 o</td><td>Initialisation et supervision</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <strong>⚠️ Pourquoi cette hiérarchie</strong>
+    <p>L'ISP est prioritaire pour ne jamais perdre de frame caméra. Le NN est juste en dessous, car son temps d'exécution (~30–50 ms) doit s'absorber sans accumulation de retard. Le post-processing et l'affichage tolèrent davantage de jitter et partagent donc la priorité 14.</p>
+  </div>
+
+  <h2>3.3 Création des tâches</h2>
+  <p>Toutes les tâches sont créées dans <code>app_run()</code> par appels successifs à <code>tk_cre_tsk()</code> puis démarrées par <code>tk_sta_tsk()</code> :</p>
+
+  <pre><code>// Pseudocode (extrait simplifié de app.c)
+T_CTSK ctsk = {
+    .stksz = 2 * UTKERNEL_STACK_SIZE,
+    .tskatr = TA_HLNG | TA_RNG3,
+};
+
+ctsk.task = nn_thread_fct;  ctsk.itskpri = 11;
+nn_tskid = tk_cre_tsk(&amp;ctsk);
+tk_sta_tsk(nn_tskid, 0);
+
+ctsk.task = pp_thread_fct;  ctsk.itskpri = 14;
+pp_tskid = tk_cre_tsk(&amp;ctsk);
+tk_sta_tsk(pp_tskid, 0);
+
+ctsk.task = dp_thread_fct;  ctsk.itskpri = 14;
+dp_tskid = tk_cre_tsk(&amp;ctsk);
+tk_sta_tsk(dp_tskid, 0);
+
+ctsk.task = isp_thread_fct; ctsk.itskpri = 10;
+isp_tskid = tk_cre_tsk(&amp;ctsk);
+tk_sta_tsk(isp_tskid, 0);</code></pre>
+
+  <h2>3.4 Services RTOS utilisés</h2>
+
+  <h3>Gestion des tâches</h3>
+  <ul>
+    <li><code>tk_cre_tsk()</code> — création</li>
+    <li><code>tk_sta_tsk()</code> — démarrage</li>
+    <li><code>tk_slp_tsk()</code> — endormissement</li>
+    <li><code>tk_wup_tsk()</code> — réveil</li>
+    <li><code>tk_dly_tsk()</code> — délai</li>
+  </ul>
+
+  <h3>Synchronisation</h3>
+  <p>Le projet définit cinq objets de synchronisation explicites :</p>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Objet</th><th>Type</th><th>Rôle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>nn_input_queue.free</code> / <code>.ready</code></td><td>Sémaphores</td><td>File circulaire à 2 buffers d'entrée NN</td></tr>
+        <tr><td><code>nn_output_queue.free</code> / <code>.ready</code></td><td>Sémaphores</td><td>File circulaire à 2 buffers de sortie NN</td></tr>
+        <tr><td><code>isp_sem</code></td><td>Sémaphore</td><td>Signalé par l'ISR VSYNC pour réveiller <code>isp_thread</code></td></tr>
+        <tr><td><code>disp.update</code></td><td>Sémaphore</td><td>Notifie <code>dp_thread</code> qu'un nouveau résultat est prêt</td></tr>
+        <tr><td><code>disp.lock</code></td><td>Mutex (FIFO)</td><td>Protège la structure partagée <code>disp.info</code> entre <code>pp_thread</code> et <code>dp_thread</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Mesure du temps</h3>
+  <ul>
+    <li><code>tk_get_otm()</code> — horloge système RTOS pour profilage</li>
+    <li><code>HAL_GetTick()</code> — tick milliseconde STM32 HAL</li>
+  </ul>
+
+  <h2>3.5 Schéma d'exécution concurrente</h2>
+  <pre><code>┌────────────────────────────────────────────────────────────┐
+│ Ordonnanceur préemptif μT-Kernel                           │
+│                                                            │
+│  VSYNC (IRQ DCMIPP)                                        │
+│      │                                                     │
+│      ▼ tk_sig_sem(isp_sem)                                 │
+│  ┌────────────┐                                            │
+│  │ isp_thread │  prio 10 — CAM_IspUpdate()                 │
+│  └─────┬──────┘                                            │
+│        │ DCMIPP frame ready (callback)                     │
+│        ▼ produit dans nn_input_queue                       │
+│  ┌────────────┐                                            │
+│  │ nn_thread  │  prio 11 — Run_Inference() sur NPU         │
+│  └─────┬──────┘                                            │
+│        ▼ produit dans nn_output_queue                      │
+│  ┌────────────┐                                            │
+│  │ pp_thread  │  prio 14 — NMS + tracking                  │
+│  └─────┬──────┘                                            │
+│        ▼ tk_loc_mtx(disp.lock) ; tk_sig_sem(disp.update)   │
+│  ┌────────────┐                                            │
+│  │ dp_thread  │  prio 14 — dessin LCD                      │
+│  └────────────┘                                            │
+└────────────────────────────────────────────────────────────┘</code></pre>
+
+  <h2>3.6 Bénéfices apportés par le RTOS</h2>
+  <ol>
+    <li><strong>Déterminisme</strong> — la priorité préemptive garantit que la caméra et le NPU obtiennent du CPU à temps.</li>
+    <li><strong>Parallélisme du pipeline</strong> — acquisition, inférence, post-traitement et affichage s'exécutent simultanément.</li>
+    <li><strong>Synchronisation propre</strong> — sémaphores et mutex remplacent toute approche par <em>flags</em> globaux fragiles.</li>
+    <li><strong>Gestion mémoire</strong> — les buffers sont alloués statiquement, sans fragmentation.</li>
+    <li><strong>Réactivité</strong> — l'ISR VSYNC ne fait que signaler un sémaphore, le travail réel est différé dans <code>isp_thread</code>.</li>
+  </ol>
+
+  <div class="callout success">
+    <strong>➡️ Étape suivante</strong>
+    <p>La page <a href="04-pipeline-ia.html"><strong>04 — Pipeline IA</strong></a> trace pas à pas le parcours d'une frame caméra, depuis le capteur jusqu'à l'affichage des boîtes englobantes.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Architecture Logicielle — 03/06
+</footer>
+
+</body>
+</html>

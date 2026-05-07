@@ -1,0 +1,635 @@
+/* =============================================================
+   COMMON.CSS — Feuille de style partagée
+   Documentation Technique STM32N6 Survivor Detection
+   -------------------------------------------------------------
+   Inspiration : style SNDC Ecoclim (commun à toutes les pages)
+   Centralise : reset, typographie, header, footer,
+   navigation globale, cartes, badges, tags et utilitaires.
+   ============================================================= */
+
+
+/* ===== 1. RESET / BASE ===== */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Poppins', 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #f7f7f7 100%);
+    color: #2c3e50;
+    min-height: 100vh;
+}
+
+
+/* ===== 2. NAVIGATION GLOBALE (sticky) ===== */
+.global-nav {
+    background: #ffffff;
+    border-bottom: 1px solid #e0e6ed;
+    box-shadow: 0 1px 6px rgba(44, 62, 80, 0.06);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+    min-height: 56px;
+}
+
+.global-nav .nav-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #5a7a93;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 7px 12px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.global-nav .nav-back:hover {
+    background: #f0f4f8;
+    border-color: #d4dce6;
+    color: #2c3e50;
+}
+
+.global-nav .nav-back svg {
+    width: 14px;
+    height: 14px;
+}
+
+.global-nav .nav-tabs {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.global-nav .nav-tabs li {
+    margin: 0;
+}
+
+.global-nav .nav-tabs li a {
+    display: flex;
+    align-items: center;
+    height: 56px;
+    padding: 0 14px;
+    color: #7a8fa3;
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.global-nav .nav-tabs li a:hover {
+    color: #2563eb;
+    border-bottom-color: #c5d8f5;
+    background: #fafbfd;
+}
+
+.global-nav .nav-tabs li a.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+    background: linear-gradient(180deg, transparent 0%, #f0f5fd 100%);
+}
+
+.global-nav .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    margin-left: auto;
+    font-weight: 700;
+    color: #2c3e50;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+}
+
+.global-nav .nav-brand .brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+    display: inline-block;
+}
+
+
+/* ===== 3. PAGE TITLE (sous la nav) ===== */
+.page-title {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    padding: 32px 40px 28px;
+    border-bottom: 1px solid #e0e6ed;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(44, 62, 80, 0.04);
+    position: relative;
+}
+
+.page-title h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin: 0;
+}
+
+.page-title p {
+    margin-top: 8px;
+    font-size: 0.9rem;
+    color: #7a8fa3;
+    font-weight: 400;
+}
+
+/* Header de l'index : plus haut, plus présent */
+.page-title.index-hero {
+    padding: 56px 40px 44px;
+}
+
+.page-title.index-hero h1 {
+    font-size: 2rem;
+}
+
+.logo-bar {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+
+/* ===== 4. BADGES ===== */
+.badge {
+    background: #f0f4f8;
+    border: 1px solid #d4dce6;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    color: #7a8fa3;
+    font-weight: 500;
+}
+
+.badge-green  { background: #e6f9ee; border-color: #a8dfc0; color: #2e7d52; }
+.badge-blue   { background: #e8f0fe; border-color: #a8c0f0; color: #1a56a8; }
+.badge-purple { background: #f3effe; border-color: #c4b0f0; color: #6d28d9; }
+.badge-orange { background: #fff4e6; border-color: #f0c89a; color: #b45309; }
+.badge-red    { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+
+
+/* ===== 5. MAIN ===== */
+main {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 40px 24px 60px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 40px auto;
+    padding: 0 24px 60px;
+}
+
+
+/* ===== 6. SECTION TITLE ===== */
+.section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #5a7a93;
+    margin-bottom: 20px;
+    margin-top: 40px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e0e6ed;
+}
+
+
+/* ===== 7. CARTES (index principal) ===== */
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin-bottom: 52px;
+}
+
+.card {
+    background: #ffffff;
+    border: 1px solid #e0e6ed;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 32px rgba(44, 62, 80, 0.12);
+}
+
+.card-top {
+    padding: 28px 24px 18px;
+    border-bottom: 1px solid #e0e6ed;
+    flex: 1;
+}
+
+.card-top .icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-top h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+.card-top p {
+    font-size: 0.875rem;
+    color: #7a8fa3;
+    line-height: 1.6;
+}
+
+.card-top .tag-list {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.card-footer {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+}
+
+.btn-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 22px;
+    border-radius: 7px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #fff;
+    transition: opacity 0.2s;
+}
+
+.btn-open:hover { opacity: 0.85; }
+
+.btn-open svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Variantes de cartes par type */
+.card-hw       { border-top: 3px solid #2563eb; }
+.card-hw       .icon     { background: #1d4ed8; }
+.card-hw       .btn-open { background: #2563eb; }
+
+.card-sw       { border-top: 3px solid #7c3aed; }
+.card-sw       .icon     { background: #6d28d9; }
+.card-sw       .btn-open { background: #7c3aed; }
+
+.card-ai       { border-top: 3px solid #16a34a; }
+.card-ai       .icon     { background: #15803d; }
+.card-ai       .btn-open { background: #16a34a; }
+
+.card-grafcet  { border-top: 3px solid #0891b2; }
+.card-grafcet  .icon     { background: #0e7490; }
+.card-grafcet  .btn-open { background: #0891b2; }
+
+/* ===== 8. TAGS ===== */
+.tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.tag-blue   { background: #1d4ed8; color: #bfdbfe; }
+.tag-green  { background: #15803d; color: #bbf7d0; }
+.tag-orange { background: #c2410c; color: #fed7aa; }
+.tag-purple { background: #6d28d9; color: #ddd6fe; }
+.tag-slate  { background: #f0f4f8; border: 1px solid #d4dce6; color: #7a8fa3; }
+.tag-cyan   { background: #cffafe; color: #164e63; }
+.tag-red    { background: #fee2e2; color: #991b1b; }
+.tag-amber  { background: #fef3c7; color: #78350f; }
+
+/* Tag dans une carte = couleur principale de la carte */
+.card-hw      .tag { background: #1d4ed8; color: #bfdbfe; border: none; }
+.card-sw      .tag { background: #6d28d9; color: #ddd6fe; border: none; }
+.card-ai      .tag { background: #15803d; color: #bbf7d0; border: none; }
+.card-grafcet .tag { background: #0e7490; color: #cffafe; border: none; }
+
+
+/* ===== 9. INFO GRID (KPIs) ===== */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+}
+
+.info-card {
+    background: #ffffff;
+    border: 1px solid #e0e6ed;
+    border-radius: 10px;
+    padding: 20px 22px;
+}
+
+.info-card .label {
+    font-size: 0.75rem;
+    color: #7a8fa3;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+}
+
+.info-card .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.info-card .sub {
+    font-size: 0.8rem;
+    color: #7a8fa3;
+    margin-top: 4px;
+}
+
+
+/* ===== 10. CONTENU ÉDITORIAL (h2/h3, paragraphes, listes) ===== */
+.container h2,
+main h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 32px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e0e6ed;
+}
+
+.container h3,
+main h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 24px 0 10px;
+}
+
+.container p,
+main p {
+    line-height: 1.7;
+    margin-bottom: 14px;
+    color: #3d4a5a;
+    font-size: 0.95rem;
+}
+
+.container ul,
+main ul,
+.container ol,
+main ol {
+    margin: 10px 0 18px 28px;
+    line-height: 1.8;
+    color: #3d4a5a;
+    font-size: 0.95rem;
+}
+
+.container code,
+main code {
+    background: #f0f4f8;
+    border: 1px solid #d4dce6;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 0.85rem;
+    color: #1e40af;
+}
+
+.container pre,
+main pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 18px 22px;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 14px 0 22px;
+    font-family: 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    border: 1px solid #334155;
+}
+
+.container pre code,
+main pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+}
+
+
+/* ===== 11. CALLOUTS / NOTES ===== */
+.callout {
+    border-left: 4px solid #2563eb;
+    background: #eff6ff;
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0 22px;
+}
+
+.callout strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #1e40af;
+}
+
+.callout p {
+    margin: 0;
+    color: #3d4a5a;
+    font-size: 0.9rem;
+}
+
+.callout.warn { border-left-color: #d97706; background: #fffbeb; }
+.callout.warn strong { color: #92400e; }
+
+.callout.danger { border-left-color: #dc2626; background: #fef2f2; }
+.callout.danger strong { color: #991b1b; }
+
+.callout.success { border-left-color: #16a34a; background: #f0fdf4; }
+.callout.success strong { color: #15803d; }
+
+
+/* ===== 12. TABLEAUX ===== */
+.table-wrap {
+    overflow-x: auto;
+    margin: 14px 0 22px;
+    border: 1px solid #e0e6ed;
+    border-radius: 10px;
+}
+
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+table.data thead th {
+    background: #f0f4f8;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #5a7a93;
+    border-bottom: 2px solid #d4dce6;
+}
+
+table.data tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #eef2f7;
+    color: #3d4a5a;
+    vertical-align: top;
+}
+
+table.data tbody tr:last-child td { border-bottom: none; }
+
+table.data tbody tr:hover { background: #fafbfd; }
+
+table.data td code {
+    background: #f0f4f8;
+    border: 1px solid #d4dce6;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'Cascadia Mono', 'Consolas', monospace;
+    font-size: 0.82rem;
+    color: #1e40af;
+}
+
+
+/* ===== 13. STAT ROW (cartes statistiques inline) ===== */
+.stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin: 18px 0 28px;
+}
+
+.stat {
+    background: #ffffff;
+    border: 1px solid #e0e6ed;
+    border-radius: 10px;
+    padding: 16px 18px;
+    text-align: center;
+}
+
+.stat .val {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.stat .lbl {
+    font-size: 0.78rem;
+    color: #7a8fa3;
+    margin-top: 4px;
+}
+
+.stat.blue   { border-top: 3px solid #2563eb; }
+.stat.green  { border-top: 3px solid #16a34a; }
+.stat.orange { border-top: 3px solid #d97706; }
+.stat.purple { border-top: 3px solid #7c3aed; }
+.stat.cyan   { border-top: 3px solid #0891b2; }
+
+
+/* ===== 14. FOOTER ===== */
+footer {
+    text-align: center;
+    padding: 32px;
+    color: #7a8fa3;
+    font-size: 0.78rem;
+    border-top: 1px solid #e0e6ed;
+    margin-top: 48px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #f0f4f8 100%);
+}
+
+
+/* ===== 15. ACCESSIBILITÉ ===== */
+a:focus-visible,
+button:focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+
+/* ===== 16. IMPRESSION ===== */
+@media print {
+    .global-nav,
+    nav { display: none !important; }
+    body { background: #fff; color: #000; font-size: 11pt; }
+    main, .container {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .page-title {
+        background: #fff !important;
+        box-shadow: none !important;
+        border-bottom: 2px solid #000 !important;
+        padding: 16px 0 14px !important;
+        text-align: left !important;
+    }
+    .card, .info-card, .stat {
+        box-shadow: none !important;
+        page-break-inside: avoid;
+    }
+    h1, h2, h3, h4 {
+        page-break-after: avoid;
+    }
+}

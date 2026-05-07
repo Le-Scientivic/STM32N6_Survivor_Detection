@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modèle IA YOLO-X Nano — STM32N6 Survivor Detection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="../01-Architecture-Hardware/architecture-hardware.html">Architecture Matérielle</a></li>
+    <li><a href="../02-Architecture-Logicielle/01-vue-ensemble.html">Architecture Logicielle</a></li>
+    <li><a href="modele-yolo-x.html" class="active">Modèle IA</a></li>
+    <li><a href="../04-Sequencage/grafcet.html">Grafcet</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>STM32N6 Survivor Detection</div>
+</nav>
+
+<div class="page-title">
+  <h1>Modèle IA — YOLO-X Nano</h1>
+  <p>Réseau de détection d'objets quantifié INT8, optimisé pour le NPU STM32N6 par STMicroelectronics</p>
+</div>
+
+<div class="container">
+
+  <div class="callout">
+    <strong>🧠 Choix du modèle</strong>
+    <p>Le projet utilise <strong>YOLO-X Nano</strong>, une variante allégée et optimisée par ST de la famille YOLO-X. Elle a été choisie pour son ratio précision / latence sur NPU embarqué : un seul réseau exécuté entièrement sur l'accélérateur, à 25–30 FPS, pour une consommation mémoire compatible avec la flash externe.</p>
+  </div>
+
+  <h2>1. Caractéristiques du réseau</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Caractéristique</th><th>Valeur</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Architecture</td><td>YOLO-X Nano (variante ST)</td></tr>
+        <tr><td>Fichier source</td><td><code>st_yolo_x_nano_480_1.0_0.25_3_st_int8.tflite</code></td></tr>
+        <tr><td>Format de l'entrée</td><td>480 × 480 × 3 (RGB888)</td></tr>
+        <tr><td>Quantification</td><td>INT8 (poids et activations)</td></tr>
+        <tr><td>Nombre de classes</td><td>2 — <code>person</code> · <code>not_person</code></td></tr>
+        <tr><td>Taille du modèle</td><td>≈ 1,6 MB (TFLite source) · 3,6 MB (poids embarqués)</td></tr>
+        <tr><td>Stockage</td><td>NOR flash externe XSPI2 (memory-mapped, XIP)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>2. Génération du modèle (NeuralART)</h2>
+  <p>Le modèle TFLite est compilé pour le NPU STM32N6 par l'outil <strong>NeuralART</strong> de STMicroelectronics. La configuration est définie dans <code>Model/STM32N6570-DK/user_neuralart.json</code> :</p>
+
+  <pre><code>{
+  "memory_pool": "./my_mpools/stm32n6-app2.mpool",
+  "options": "--enable-epoch-controller -O3 --all-buffers-info --mvei
+              --cache-maintenance --Oalt-sched --native-float
+              --enable-virtual-mem-pools --Omax-ca-pipe 4
+              --Ocache-opt --Os"
+}</code></pre>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Option NeuralART</th><th>Effet</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>--enable-epoch-controller</code></td><td>Activation du contrôleur d'époques (planification du NPU)</td></tr>
+        <tr><td><code>--cache-maintenance</code></td><td>Insertion des invalidations / clean cache nécessaires</td></tr>
+        <tr><td><code>--Oalt-sched</code></td><td>Scheduler alternatif optimisé</td></tr>
+        <tr><td><code>--enable-virtual-mem-pools</code></td><td>Pools mémoire virtuels pour activations intermédiaires</td></tr>
+        <tr><td><code>--Omax-ca-pipe 4</code></td><td>Profondeur maximale du pipeline coarse-grain</td></tr>
+        <tr><td><code>--Ocache-opt --Os</code></td><td>Optimisation cache + taille</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>3. Artefacts produits</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Fichier</th><th>Contenu</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>network.c</code></td><td>Code C généré : graphe d'opérations et configuration runtime</td></tr>
+        <tr><td><code>network.h</code></td><td>Déclaration de l'instance <code>NN_Instance_Default</code></td></tr>
+        <tr><td><code>network_ecblobs.h</code></td><td>Constantes embarquées (poids quantifiés)</td></tr>
+        <tr><td><code>network_data.hex</code></td><td>Image binaire des poids, programmée en flash NOR</td></tr>
+        <tr><td><code>generate-n6-model.sh</code></td><td>Script de génération NeuralART à la racine du modèle</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>4. Intégration côté firmware</h2>
+  <p>Le firmware référence le réseau via la macro de déclaration NeuralART, puis manipule l'instance comme un objet opaque :</p>
+
+  <pre><code>// Déclaration de l'instance et de son interface
+LL_ATON_DECLARE_NAMED_NN_INSTANCE_AND_INTERFACE(Default);
+
+// Initialisation (au boot, dans app_run)
+LL_ATON_RT_RuntimeInit();
+LL_ATON_RT_Init_Network(&amp;NN_Instance_Default);
+
+// Cycle d'inférence (dans nn_thread)
+LL_ATON_Set_User_Input_Buffer(&amp;NN_Instance_Default, input_buf, NN_BUF_SIZE);
+LL_ATON_RT_RunInference_*(&amp;NN_Instance_Default);
+output = LL_ATON_Get_User_Output_Buffer(&amp;NN_Instance_Default);</code></pre>
+
+  <h2>5. Post-traitement</h2>
+  <p>La sortie brute du réseau est un tenseur de prédictions YOLO (boîtes + scores + classes). Le wrapper <code>app-postprocessing-wrapper</code> standardise cette sortie en une liste de boîtes filtrées par NMS et seuil de confiance, accessible via la structure <code>od_pp_out_t</code>.</p>
+
+  <pre><code>typedef struct {
+    int        nb_detect;       // Nombre de boîtes après NMS
+    od_box_t  *pOutBuff;        // Tableau de boîtes
+    /* class, score, x, y, w, h pour chaque détection */
+} od_pp_out_t;</code></pre>
+
+  <h3>Paramètres de filtrage</h3>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Macro</th><th>Valeur</th><th>Signification</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>AI_OD_ST_YOLOX_PP_CONF_THRESHOLD</code></td><td>0.6</td><td>Score minimum pour conserver une détection</td></tr>
+        <tr><td><code>AI_OD_ST_YOLOX_PP_IOU_THRESHOLD</code></td><td>0.5</td><td>Seuil d'IoU dans la NMS (élimination des doublons)</td></tr>
+        <tr><td><code>AI_OD_ST_YOLOX_PP_MAX_BOXES_LIMIT</code></td><td>10</td><td>Nombre maximum de boîtes retournées</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>6. Tracking optionnel</h2>
+  <p>Lorsque la macro <code>TRACKER_MODULE</code> est définie, un module de tracking attribue un identifiant persistant à chaque survivant détecté. Le contexte <code>trk_ctx</code> conserve l'historique des détections et applique un filtre de Kalman entre frames.</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Paramètre</th><th>Valeur</th><th>Effet</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>track_thresh</code></td><td>0.25</td><td>Score minimum pour démarrer un suivi</td></tr>
+        <tr><td><code>det_thresh</code></td><td>0.8</td><td>Score haut requis pour une nouvelle association forte</td></tr>
+        <tr><td><code>sim1_thresh</code></td><td>0.8</td><td>Seuil de similarité primaire</td></tr>
+        <tr><td><code>sim2_thresh</code></td><td>0.5</td><td>Seuil de similarité secondaire</td></tr>
+        <tr><td><code>tlost_cnt</code></td><td>30 frames</td><td>Nombre de frames sans détection avant perte de l'ID</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>7. Flux d'inférence — vue compacte</h2>
+  <pre><code>Frame caméra (480×480 RGB888)
+    │
+    ▼  LL_ATON_Set_User_Input_Buffer
+┌──────────────────────────┐
+│  Réseau YOLO-X Nano      │
+│  exécuté sur le NPU      │
+│  ≈ 30–50 ms / inférence  │
+└────────────┬─────────────┘
+             ▼  LL_ATON_Get_User_Output_Buffer
+       Sortie brute
+             │
+             ▼  app_postprocess_run
+   Décodage + NMS (lib_vision_models_pp)
+             │
+             ▼  od_pp_out_t (≤ 10 boîtes)
+   [Tracker]  ── ajoute id persistant
+             │
+             ▼
+   Affichage (LCD) + JSON sur USART1</code></pre>
+
+  <h2>8. Adapter le modèle</h2>
+  <p>Pour modifier la sensibilité ou la cadence du système, il suffit en général d'ajuster <code>app_config.h</code> sans regénérer le modèle :</p>
+  <ul>
+    <li><strong>Augmenter <code>AI_OD_ST_YOLOX_PP_CONF_THRESHOLD</code></strong> → moins de faux positifs, plus de faux négatifs.</li>
+    <li><strong>Diminuer <code>AI_OD_ST_YOLOX_PP_IOU_THRESHOLD</code></strong> → la NMS supprime davantage de doublons.</li>
+    <li><strong>Modifier <code>NB_CLASSES</code></strong> → impose une régénération du modèle TFLite avec le bon nombre de classes.</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>⚠️ Régénération du modèle</strong>
+    <p>Toute modification de la résolution d'entrée, du nombre de classes ou de l'architecture impose de relancer <code>generate-n6-model.sh</code> et de reprogrammer la flash NOR avec le nouveau <code>network_data.hex</code>.</p>
+  </div>
+
+  <div class="callout success">
+    <strong>➡️ Pour aller plus loin</strong>
+    <p>Le détail du flux temps réel autour du modèle est documenté dans la page <a href="../02-Architecture-Logicielle/04-pipeline-ia.html"><strong>Pipeline IA</strong></a>, et la séquence complète d'exécution est tracée dans le <a href="../04-Sequencage/grafcet.html"><strong>Grafcet fonctionnel</strong></a>.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Modèle IA YOLO-X Nano
+</footer>
+
+</body>
+</html>

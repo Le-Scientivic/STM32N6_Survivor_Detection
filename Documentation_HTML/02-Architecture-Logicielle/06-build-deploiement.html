@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 — Build &amp; déploiement — Architecture Logicielle</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common.css">
+</head>
+<body>
+
+<nav class="global-nav">
+  <a class="nav-back" href="../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Index
+  </a>
+  <ul class="nav-tabs">
+    <li><a href="01-vue-ensemble.html">01 — Vue d'ensemble</a></li>
+    <li><a href="02-modules.html">02 — Modules</a></li>
+    <li><a href="03-rtos-mtkernel.html">03 — RTOS μT-Kernel</a></li>
+    <li><a href="04-pipeline-ia.html">04 — Pipeline IA</a></li>
+    <li><a href="05-protocole-serie.html">05 — Protocole série</a></li>
+    <li><a href="06-build-deploiement.html" class="active">06 — Build &amp; déploiement</a></li>
+    <li><a href="mapping-fonctions.html">🔧 Mapping fonctions</a></li>
+  </ul>
+  <div class="nav-brand"><span class="brand-dot"></span>Architecture Logicielle</div>
+</nav>
+
+<div class="page-title">
+  <h1>06 — Build &amp; déploiement</h1>
+  <p>Compilation, signature, programmation et lancement sur STM32N6570-DK</p>
+</div>
+
+<div class="container">
+
+  <h2>6.1 Prérequis</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Outil</th><th>Version minimum</th><th>Rôle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>STM32CubeIDE</td><td>1.19.0</td><td>IDE et toolchain ARM GCC</td></tr>
+        <tr><td>STM32CubeProgrammer</td><td>2.20.0</td><td>Programmation des binaires</td></tr>
+        <tr><td>STM32_SigningTool_CLI</td><td>—</td><td>Signature des binaires applicatifs (livré avec STM32CubeProgrammer)</td></tr>
+        <tr><td>Carte cible</td><td>STM32N6570-DK Discovery Kit</td><td>Cible physique</td></tr>
+        <tr><td>Programmateur</td><td>ST-LINK on-board</td><td>Connexion SWD</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>6.2 Configuration de compilation</h2>
+  <p>Le projet est compilé en optimisation taille (<code>-Os</code>) avec les options suivantes :</p>
+
+  <pre><code>-mcpu=cortex-m55
+-mthumb
+-mfpu=fpv5-d16
+-mfloat-abi=hard
+-mcmse                # Activation TrustZone (Secure)
+-Os</code></pre>
+
+  <h3>Macros de compilation</h3>
+  <pre><code>DEBUG
+STM32N657xx
+STM32N6570_DK_REV
+USE_FULL_LL_DRIVER
+USE_IMX335_SENSOR
+USE_VD55G1_SENSOR
+USE_VD66GY_SENSOR
+TRACKER_MODULE
+LL_ATON_PLATFORM=LL_ATON_PLAT_STM32N6
+SCR_LIB_USE_LTDC</code></pre>
+
+  <h2>6.3 Disposition mémoire</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Composant</th><th>Région</th><th>Linker / Outil</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>FSBL</td><td>AXISRAM2 (interne)</td><td>Pré-compilé fourni</td></tr>
+        <tr><td>Application</td><td>XSPI RAM externe (memory-mapped)</td><td><code>Appli/STM32N657X0HXQ_LRUN.ld</code></td></tr>
+        <tr><td>Modèle IA + poids</td><td>XSPI NOR flash externe (XIP)</td><td>Programmé séparément</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>6.4 Procédure de build dans STM32CubeIDE</h2>
+  <ol>
+    <li>Ouvrir <strong>STM32CubeIDE</strong>.</li>
+    <li><code>File → Import → Existing Projects into Workspace</code> et pointer la racine du dépôt.</li>
+    <li>Importer le projet <strong>STM32N6_MTK_Person_Detection</strong>.</li>
+    <li>Clic droit sur <code>Appli</code> → <code>C/C++ Build → Settings → Build Steps</code>.</li>
+    <li>Adapter la commande <strong>post-build</strong> avec le chemin réel vers <code>STM32_SigningTool_CLI</code> (situé dans <code>STM32CubeProgrammer/bin</code>).</li>
+    <li>Clic droit sur <code>Appli</code> → <strong>Build Project</strong>.</li>
+    <li>Vérifier la production de <code>Appli/Debug/STM32N6_MTK_Person_Detection_Appli-Trusted.bin</code>.</li>
+  </ol>
+
+  <h2>6.5 Programmation des binaires (mode Dev Boot)</h2>
+  <div class="callout warn">
+    <strong>⚠️ Mode Dev Boot</strong>
+    <p>Avant la programmation, configurer la carte en <strong>BOOT0 = LOW · BOOT1 = HIGH</strong>.</p>
+  </div>
+
+  <p>Trois binaires doivent être programmés dans l'ordre suivant via STM32CubeProgrammer :</p>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Ordre</th><th>Fichier</th><th>Adresse / Action</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><code>Binaries/ai_fsbl.hex</code></td>
+          <td>Hex auto-routé (FSBL)</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><code>Binaries/network_data-dk.hex</code> (poids du modèle)</td>
+          <td>Hex auto-routé (NOR flash)</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><code>Binaries/STM32N6_MTK_Person_Detection_Appli-Trusted.bin</code></td>
+          <td>Adresse <code>0x70100000</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>6.6 Lancement de l'application (mode Flash Boot)</h2>
+  <ol>
+    <li>Déconnecter STM32CubeProgrammer.</li>
+    <li>Repasser la carte en <strong>BOOT0 = LOW · BOOT1 = LOW</strong> (Flash Boot).</li>
+    <li>Reset (ou cycle d'alimentation).</li>
+    <li>Le FSBL démarre, charge l'application en RAM externe et l'exécute.</li>
+    <li>Surveiller la sortie sur USART1 via un terminal série (115200 baud).</li>
+  </ol>
+
+  <h2>6.7 Performances attendues</h2>
+  <div class="stat-row">
+    <div class="stat green"><div class="val">25–30</div><div class="lbl">FPS</div></div>
+    <div class="stat blue"><div class="val">30–50 ms</div><div class="lbl">Inférence NPU</div></div>
+    <div class="stat orange"><div class="val">40–60 %</div><div class="lbl">Charge CPU</div></div>
+    <div class="stat purple"><div class="val">~700 KB</div><div class="lbl">Code firmware</div></div>
+    <div class="stat cyan"><div class="val">3,6 MB</div><div class="lbl">Modèle YOLO-X</div></div>
+  </div>
+
+  <h2>6.8 Résolution des problèmes courants</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Symptôme</th><th>Cause probable</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>L'application ne démarre pas après reset</td>
+          <td>Mode boot incorrect</td>
+          <td>Vérifier BOOT0/BOOT1 = LOW/LOW</td>
+        </tr>
+        <tr>
+          <td>Caméra noire</td>
+          <td>Macro capteur non définie</td>
+          <td>Vérifier <code>USE_*_SENSOR</code> au build</td>
+        </tr>
+        <tr>
+          <td>Inférence très lente</td>
+          <td>Cache NPU non activé</td>
+          <td>Vérifier <code>NPUCache_config()</code> dans <code>main.c</code></td>
+        </tr>
+        <tr>
+          <td>Pas de log série</td>
+          <td>Console mal initialisée</td>
+          <td>Vérifier <code>CONSOLE_Config()</code> et le port série hôte</td>
+        </tr>
+        <tr>
+          <td>Format série illisible</td>
+          <td>Mauvais format choisi</td>
+          <td>Repasser <code>SERIAL_OUTPUT_FORMAT</code> à <code>FORMAT_JSON</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout success">
+    <strong>✅ Documentation complète</strong>
+    <p>Pour comprendre le modèle exécuté sur le NPU, consultez la page <a href="../03-Modele-IA/modele-yolo-x.html"><strong>Modèle IA YOLO-X Nano</strong></a>. Pour la séquence d'événements à l'exécution, voir le <a href="../04-Sequencage/grafcet.html"><strong>Grafcet fonctionnel</strong></a>.</p>
+  </div>
+
+</div>
+
+<footer>
+  Documentation Technique · STM32N6 Survivor Detection · Architecture Logicielle — 06/06
+</footer>
+
+</body>
+</html>
