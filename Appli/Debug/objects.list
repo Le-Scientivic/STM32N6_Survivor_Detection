@@ -1,4 +1,5 @@
 "./Core/Src/app.o"
+"./Core/Src/app_SD.o"
 "./Core/Src/app_cam.o"
 "./Core/Src/app_fuseprogramming.o"
 "./Core/Src/main.o"

@@ -22,19 +22,31 @@
 
 #include "postprocess_conf.h"
 
-/* Define sensor orientation */
-#define CAMERA_FLIP CMW_MIRRORFLIP_MIRROR
+// Defines if the program must use the camera or read the SD card
+#define USE_CAMERA
+// Defines if the program must display the result on the LCD
+#define USE_LCD
 
-/* Define display size */
-#ifdef STM32N6570_DK_REV
-#define LCD_BG_WIDTH 800
-#define LCD_BG_HEIGHT 480
-#else
-#define LCD_BG_WIDTH 320
-#define LCD_BG_HEIGHT 240
+// Enables the display of additional informations
+#define ENABLE_FULL_INFOS
+
+#ifdef USE_CAMERA
+	/* Define sensor orientation */
+	#define CAMERA_FLIP CMW_MIRRORFLIP_MIRROR
 #endif
-/* Delay display by DISPLAY_DELAY frame number */
-#define DISPLAY_DELAY 1
+
+#ifdef USE_LCD
+	/* Define display size */
+	#ifdef STM32N6570_DK_REV
+	#define LCD_BG_WIDTH 800
+	#define LCD_BG_HEIGHT 480
+	#else
+	#define LCD_BG_WIDTH 320
+	#define LCD_BG_HEIGHT 240
+	#endif
+	/* Delay display by DISPLAY_DELAY frame number */
+	#define DISPLAY_DELAY 1
+#endif
 
 #ifdef STM32N6570_DK_REV
 /* Use yolox */

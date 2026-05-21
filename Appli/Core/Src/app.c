@@ -20,15 +20,24 @@
 
 #include <stdint.h>
 
-#include "app_cam.h"
 #include "app_config.h"
+
+#ifdef USE_CAMERA
+	#include "app_cam.h"
+	#include "cmw_camera.h"
+#else
+	#include "added/app_SD.h"
+#endif
+
+#ifdef USE_LCD
+	#include "scrl.h"
+	#include "stm32_lcd.h"
+	#include "stm32_lcd_ex.h"
+#endif
+
 #include "app_postprocess.h"
 #include "isp_api.h"
-#include "cmw_camera.h"
-#include "scrl.h"
 #include "serial_protocol.h"
-#include "stm32_lcd.h"
-#include "stm32_lcd_ex.h"
 #include "stm32n6xx_hal.h"
 #include "stm32n6570_discovery.h"
 #include "tk/tkernel.h"
@@ -504,14 +513,7 @@ static void Display_NetworkOutput_NoTracking(display_info_t *info)
 
   /* draw metrics */
   nn_fps = 1000.0 / info->nn_period_ms;
-#if 1
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Inference");
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->inf_ms);
-  line_nb += 2;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, " Persons %u", nb_rois);
-  line_nb += 1;
-#else
+#ifdef ENABLE_FULL_INFOS
   (void)nn_fps;
   UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Cpu load");
   line_nb += 1;
@@ -533,6 +535,13 @@ static void Display_NetworkOutput_NoTracking(display_info_t *info)
   line_nb += 1;
   UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->disp_ms);
   line_nb += 1;
+  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, " Persons %u", nb_rois);
+  line_nb += 1;
+#else
+  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Inference");
+  line_nb += 1;
+  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->inf_ms);
+  line_nb += 2;
   UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, " Persons %u", nb_rois);
   line_nb += 1;
 #endif
@@ -609,37 +618,37 @@ static void Display_NetworkOutput_Tracking(display_info_t *info)
 
   /* draw metrics */
   nn_fps = 1000.0 / info->nn_period_ms;
-#if 1
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Inference");
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->inf_ms);
-  line_nb += 2;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, " Persons %u", info->tboxes_valid_nb);
-  line_nb += 1;
+#ifdef ENABLE_FULL_INFOS
+	(void)nn_fps;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Cpu load");
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %.1f%%", cpu_load_one_second);
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "nn period");
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->nn_period_ms);
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Inference");
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->inf_ms);
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Post process");
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->pp_ms);
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Display");
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->disp_ms);
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, " Persons %u", info->tboxes_valid_nb);
+	line_nb += 1;
 #else
-  (void)nn_fps;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Cpu load");
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %.1f%%", cpu_load_one_second);
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "nn period");
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->nn_period_ms);
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Inference");
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->inf_ms);
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Post process");
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->pp_ms);
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Display");
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->disp_ms);
-  line_nb += 1;
-  UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, " Persons %u", info->tboxes_valid_nb);
-  line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "Inference");
+	line_nb += 1;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, "   %ums", info->inf_ms);
+	line_nb += 2;
+	UTIL_LCDEx_PrintfAt(0, LINE(line_nb), RIGHT_MODE, " Persons %u", info->tboxes_valid_nb);
+	line_nb += 1;
 #endif
 
   /* Draw bounding boxes */
@@ -694,7 +703,11 @@ static void nn_thread_fct(INT stacd, void *exinf)
 
   nn_pipe_dst = bqueue_get_free(&nn_input_queue, 0);
   assert(nn_pipe_dst);
+#ifdef USE_CAMERA
   CAM_NNPipe_Start(nn_pipe_dst, CMW_MODE_CONTINUOUS);
+#else
+  SD_NNPipe_Start(nn_pipe_dst);
+#endif
   SERIAL_MSG_STR(LEVEL_INFO, MODULE_NN, EVENT_TASK_READY, "thread", "nn_inference");
   while (1)
   {
@@ -993,7 +1006,11 @@ static void isp_thread_fct(INT stacd, void *exinf)
     ret = tk_wai_sem(isp_sem, 1, TMO_FEVR);
     assert(ret == E_OK);
 
+#ifdef USE_CAMERA
     CAM_IspUpdate();
+#else
+    SD_IspUpdate();
+#endif
   }
   tk_ext_tsk();
 }
@@ -1037,6 +1054,10 @@ static void Display_init()
 
 void app_run()
 {
+#ifndef USE_CAMERA
+	uint32_t pitch_nn = 0;
+#endif
+
   PRI isp_priority = 10;
   PRI nn_priority = 11;
   PRI pp_priority = 14;
@@ -1069,9 +1090,14 @@ void app_run()
 
   cpuload_init(&cpu_load);
 
+#ifdef USE_CAMERA
   /*** Camera Init ************************************************************/
   SERIAL_MSG(LEVEL_INFO, MODULE_CAMERA, EVENT_CAMERA_INIT);
   CAM_Init();
+#else
+  /*** SD Init ************************************************************/
+  SD_Init(&LCD_BG_WIDTH, &LCD_BG_HEIGHT, &pitch_nn);
+#endif
 
   /* sems + mutex init */
   T_CSEM sem_config;
@@ -1094,8 +1120,13 @@ void app_run()
   disp.lock = tk_cre_mtx(&mtx_config);
   assert(disp.lock > 0);
 
+#ifdef USE_CAMERA
   /* Start LCD Display camera pipe stream */
   CAM_DisplayPipe_Start(lcd_bg_buffer[0], CMW_MODE_CONTINUOUS);
+#else
+  /* Start LCD Display SD-reader pipe stream */
+  SD_DisplayPipe_Start(lcd_bg_buffer[0]);
+#endif
 
   /* threads init */
   T_CTSK task_config;
